@@ -1,6 +1,6 @@
 # anylinuxfs GUI
 
-A macOS GUI application for [anylinuxfs](https://github.com/containers/anylinuxfs) - mount Linux filesystems (ext4, btrfs, XFS, etc.) on macOS.
+A macOS GUI application for [anylinuxfs](https://github.com/nohajc/anylinuxfs) - mount Linux filesystems (ext4, btrfs, XFS, etc.) on macOS.
 
 ## Features
 
@@ -14,9 +14,9 @@ A macOS GUI application for [anylinuxfs](https://github.com/containers/anylinuxf
 ## Requirements
 
 - macOS (Apple Silicon)
-- [anylinuxfs CLI](https://github.com/containers/anylinuxfs) installed via Homebrew:
+- [anylinuxfs CLI](https://github.com/nohajc/anylinuxfs) installed via Homebrew:
   ```
-  brew install anylinuxfs
+  brew install nohajc/anylinuxfs/anylinuxfs
   ```
 
 ## Installation
