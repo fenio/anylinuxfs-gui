@@ -84,32 +84,39 @@ jobs:
           git clone https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/fenio/homebrew-tap.git
           cd homebrew-tap
 
-          cat > Casks/anylinuxfs-gui.rb << CASKEOF
-cask "anylinuxfs-gui" do
-  version "${VERSION}"
-  sha256 "${SHA256}"
+          cat > Casks/anylinuxfs-gui.rb << 'CASKEOF'
+          cask "anylinuxfs-gui" do
+            version "VERSION_PLACEHOLDER"
+            sha256 "SHA256_PLACEHOLDER"
 
-  url "https://github.com/fenio/anylinuxfs-gui/releases/download/v#{version}/anylinuxfs-gui_#{version}_aarch64.dmg"
-  name "anylinuxfs GUI"
-  desc "macOS GUI for anylinuxfs - mount Linux filesystems on macOS"
-  homepage "https://github.com/fenio/anylinuxfs-gui"
+            url "https://github.com/fenio/anylinuxfs-gui/releases/download/v#{version}/anylinuxfs-gui_#{version}_aarch64.dmg"
+            name "anylinuxfs GUI"
+            desc "macOS GUI for anylinuxfs - mount Linux filesystems on macOS"
+            homepage "https://github.com/fenio/anylinuxfs-gui"
 
-  depends_on formula: "nohajc/anylinuxfs/anylinuxfs"
-  depends_on arch: :arm64
+            depends_on formula: "nohajc/anylinuxfs/anylinuxfs"
+            depends_on arch: :arm64
 
-  app "anylinuxfs-gui.app"
+            app "anylinuxfs-gui.app"
 
-  postflight do
-    system_command "/usr/bin/xattr",
-                   args: ["-cr", "#{appdir}/anylinuxfs-gui.app"]
-  end
+            postflight do
+              system_command "/usr/bin/xattr",
+                             args: ["-cr", "#{appdir}/anylinuxfs-gui.app"]
+            end
 
-  zap trash: [
-    "~/Library/Caches/com.anylinuxfs.gui",
-    "~/Library/Preferences/com.anylinuxfs.gui.plist",
-  ]
-end
-CASKEOF
+            zap trash: [
+              "~/Library/Caches/com.anylinuxfs.gui",
+              "~/Library/Preferences/com.anylinuxfs.gui.plist",
+            ]
+          end
+          CASKEOF
+
+          # Replace placeholders with actual values
+          sed -i '' "s/VERSION_PLACEHOLDER/${VERSION}/g" Casks/anylinuxfs-gui.rb
+          sed -i '' "s/SHA256_PLACEHOLDER/${SHA256}/g" Casks/anylinuxfs-gui.rb
+
+          # Fix indentation (remove leading spaces from heredoc)
+          sed -i '' 's/^          //' Casks/anylinuxfs-gui.rb
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
