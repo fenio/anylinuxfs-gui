@@ -79,8 +79,32 @@ pub fn get_config() -> Result<AppConfig, String> {
     })
 }
 
+// Valid configuration values (must match frontend options)
+const VALID_RAM_OPTIONS: &[u32] = &[512, 1024, 2048, 4096, 8192, 16384];
+const VALID_VCPU_OPTIONS: &[u32] = &[1, 2, 4, 8, 16];
+const VALID_LOG_LEVELS: &[&str] = &["off", "error", "warn", "info", "debug", "trace"];
+
 #[tauri::command]
 pub async fn update_config(ram_mb: Option<u32>, vcpus: Option<u32>, log_level: Option<String>) -> Result<(), String> {
+    // Validate inputs before running commands
+    if let Some(ram) = ram_mb {
+        if !VALID_RAM_OPTIONS.contains(&ram) {
+            return Err(format!("Invalid RAM value: {}MB. Valid options: {:?}", ram, VALID_RAM_OPTIONS));
+        }
+    }
+
+    if let Some(cpus) = vcpus {
+        if !VALID_VCPU_OPTIONS.contains(&cpus) {
+            return Err(format!("Invalid vCPU value: {}. Valid options: {:?}", cpus, VALID_VCPU_OPTIONS));
+        }
+    }
+
+    if let Some(ref level) = log_level {
+        if !VALID_LOG_LEVELS.contains(&level.as_str()) {
+            return Err(format!("Invalid log level: '{}'. Valid options: {:?}", level, VALID_LOG_LEVELS));
+        }
+    }
+
     // Run in blocking task to avoid freezing UI
     tokio::task::spawn_blocking(move || {
         // Use the CLI to update config values

@@ -1,12 +1,12 @@
 {
   "name": "anylinuxfs-gui",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build && npm run fix-paths",
-    "fix-paths": "for f in build/*.html; do sed -i '' 's|href=\"/|href=\"./|g; s|src=\"/|src=\"./|g; s|import(\"/|import(\"./|g' \"$f\"; done",
+    "fix-paths": "node scripts/fix-paths.js",
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",

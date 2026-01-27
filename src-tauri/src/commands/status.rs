@@ -17,7 +17,9 @@ pub struct CliStatus {
 pub fn check_cli() -> CliStatus {
     CliStatus {
         available: cli::is_available(),
-        path: cli::get_path().to_string(),
+        path: cli::get_path()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| "not found".to_string()),
     }
 }
 

@@ -324,7 +324,7 @@ fn parse_disk_list_output(output: &str) -> Result<DiskListResult, String> {
     })
 }
 
-fn parse_partition_line(line: &str, disk_device: &str, partition_num: u32) -> Option<Partition> {
+fn parse_partition_line(line: &str, _disk_device: &str, _partition_num: u32) -> Option<Partition> {
     // Format: "Microsoft Basic Data NO NAME                 47.2 GB    disk6s1"
     // Or:     "ext4 linuxrootfs             7.5 GB     disk6s5"
     // The identifier is always at the end, size is before it
@@ -415,7 +415,8 @@ pub async fn mount_disk(device: String, passphrase: Option<String>) -> Result<St
         let result = execute_command(&["mount", &device], true, pass_ref);
 
         // Give a moment for mount to complete, then verify with retries
-        for _ in 0..5 {
+        // 20 retries × 500ms = 10 seconds total timeout
+        for _ in 0..20 {
             thread::sleep(Duration::from_millis(500));
             if check_nfs_mount_exists() {
                 return Ok(result.unwrap_or_else(|_| "Mounted successfully".to_string()));

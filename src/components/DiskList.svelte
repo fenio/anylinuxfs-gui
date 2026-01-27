@@ -4,11 +4,25 @@
 	import DiskCard from './DiskCard.svelte';
 	import PassphraseDialog from './PassphraseDialog.svelte';
 	import { onMount } from 'svelte';
+	import { listen } from '@tauri-apps/api/event';
+	import { startDiskWatcher } from '$lib/api';
 
 	let passphraseDevice: string | null = $state(null);
 
 	onMount(() => {
 		disks.refresh();
+
+		// Start watching for disk changes
+		startDiskWatcher().catch(console.error);
+
+		// Listen for disk change events and auto-refresh
+		const unlisten = listen('disks-changed', () => {
+			disks.refresh();
+		});
+
+		return () => {
+			unlisten.then((fn) => fn());
+		};
 	});
 
 	// Clear mounting state when we detect mount succeeded via status polling

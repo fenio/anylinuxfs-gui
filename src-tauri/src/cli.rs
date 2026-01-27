@@ -1,20 +1,68 @@
 use std::process::{Command, Stdio};
-use std::io::{Write, Read};
+use std::io::Read;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
+use std::sync::OnceLock;
 
-const ANYLINUXFS_PATH: &str = "/opt/homebrew/bin/anylinuxfs";
+/// Common locations to search for anylinuxfs
+const SEARCH_PATHS: &[&str] = &[
+    "/opt/homebrew/bin/anylinuxfs",
+    "/usr/local/bin/anylinuxfs",
+    "/usr/bin/anylinuxfs",
+];
+
+/// Cached path to anylinuxfs binary
+static ANYLINUXFS_PATH: OnceLock<Option<PathBuf>> = OnceLock::new();
+
+/// Find anylinuxfs in PATH or common locations
+fn find_anylinuxfs() -> Option<PathBuf> {
+    // First check ANYLINUXFS_PATH environment variable
+    if let Ok(env_path) = std::env::var("ANYLINUXFS_PATH") {
+        let path = PathBuf::from(&env_path);
+        if path.exists() {
+            return Some(path);
+        }
+    }
+
+    // Search in PATH using `which`
+    if let Ok(output) = Command::new("which").arg("anylinuxfs").output() {
+        if output.status.success() {
+            let path_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !path_str.is_empty() {
+                let path = PathBuf::from(&path_str);
+                if path.exists() {
+                    return Some(path);
+                }
+            }
+        }
+    }
+
+    // Fall back to common locations
+    for search_path in SEARCH_PATHS {
+        let path = Path::new(search_path);
+        if path.exists() {
+            return Some(path.to_path_buf());
+        }
+    }
+
+    None
+}
+
+/// Get the cached path to anylinuxfs, finding it if needed
+fn get_anylinuxfs_path() -> Option<&'static PathBuf> {
+    ANYLINUXFS_PATH.get_or_init(find_anylinuxfs).as_ref()
+}
 
 /// Check if the anylinuxfs CLI is available
 pub fn is_available() -> bool {
-    Path::new(ANYLINUXFS_PATH).exists()
+    get_anylinuxfs_path().is_some()
 }
 
 /// Get the path to the anylinuxfs CLI
-pub fn get_path() -> &'static str {
-    ANYLINUXFS_PATH
+pub fn get_path() -> Option<&'static Path> {
+    get_anylinuxfs_path().map(|p| p.as_path())
 }
 
 /// Execute an anylinuxfs command with optional sudo elevation
@@ -27,7 +75,10 @@ pub fn execute_command(args: &[&str], needs_sudo: bool, passphrase: Option<&str>
 }
 
 fn execute_direct(args: &[&str], passphrase: Option<&str>) -> Result<String, String> {
-    let mut cmd = Command::new(ANYLINUXFS_PATH);
+    let cli_path = get_anylinuxfs_path()
+        .ok_or_else(|| "anylinuxfs CLI not found in PATH or standard locations".to_string())?;
+
+    let mut cmd = Command::new(cli_path);
     cmd.args(args);
     cmd.stdin(Stdio::null());
 
@@ -47,12 +98,16 @@ fn execute_direct(args: &[&str], passphrase: Option<&str>) -> Result<String, Str
 }
 
 fn execute_with_sudo(args: &[&str], passphrase: Option<&str>) -> Result<String, String> {
+    let cli_path = get_anylinuxfs_path()
+        .ok_or_else(|| "anylinuxfs CLI not found in PATH or standard locations".to_string())?;
+
     // Create a temporary askpass script that uses osascript
     // This way the password never passes through our code
     let askpass_script = create_askpass_script()?;
 
     // Build the command arguments for sudo with SUDO_ASKPASS
-    let mut sudo_args = vec!["-A", "--", ANYLINUXFS_PATH];
+    let cli_path_str = cli_path.to_string_lossy();
+    let mut sudo_args: Vec<&str> = vec!["-A", "--", &cli_path_str];
     sudo_args.extend(args.iter().copied());
 
     let mut cmd = Command::new("sudo");

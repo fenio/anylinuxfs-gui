@@ -156,12 +156,6 @@
 		color: var(--success-color);
 	}
 
-	.icon-not-mounted::before {
-		content: '\25CB';
-		font-size: 18px;
-		color: var(--text-secondary);
-	}
-
 	.icon-warning::before {
 		content: '\26A0';
 		font-size: 18px;
@@ -194,19 +188,6 @@
 		background: var(--badge-bg);
 		padding: 1px 6px;
 		border-radius: 4px;
-		font-family: monospace;
-	}
-
-	.status-hint {
-		margin-top: 6px;
-		font-size: 11px;
-		color: #92400e;
-	}
-
-	.status-hint code {
-		background: rgba(0, 0, 0, 0.1);
-		padding: 1px 4px;
-		border-radius: 3px;
 		font-family: monospace;
 	}
 

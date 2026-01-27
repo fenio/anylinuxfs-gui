@@ -33,6 +33,10 @@ export async function startLogStream(): Promise<void> {
 	return await invoke<void>('start_log_stream');
 }
 
+export async function startDiskWatcher(): Promise<void> {
+	return await invoke<void>('start_disk_watcher');
+}
+
 export async function getConfig(): Promise<AppConfig> {
 	return await invoke<AppConfig>('get_config');
 }

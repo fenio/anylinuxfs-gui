@@ -1,6 +1,6 @@
 [package]
 name = "anylinuxfs-gui"
-version = "0.0.1"
+version = "0.1.1"
 edition = "2021"
 
 [lib]
@@ -15,7 +15,7 @@ tauri = { version = "2", features = [] }
 tauri-plugin-shell = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread"] }
 notify = "6"
 toml = "0.8"
 dirs = "5"
