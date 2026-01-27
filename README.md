@@ -1,8 +1,9 @@
 <p align="center">
   <img src="tuxdrive.png" width="128" height="128" alt="anylinuxfs GUI">
+# anylinuxfs GUI
 </p>
 
-# anylinuxfs GUI
+
 
 A macOS GUI application for [anylinuxfs](https://github.com/nohajc/anylinuxfs) - mount Linux filesystems (ext4, btrfs, XFS, etc.) on macOS.
 
