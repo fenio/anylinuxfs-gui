@@ -17,6 +17,10 @@ export async function unmountDisk(): Promise<string> {
 	return await invoke<string>('unmount_disk');
 }
 
+export async function ejectDisk(device: string): Promise<string> {
+	return await invoke<string>('eject_disk', { device });
+}
+
 export async function forceCleanup(): Promise<string> {
 	return await invoke<string>('force_cleanup');
 }

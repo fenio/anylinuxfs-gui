@@ -552,6 +552,27 @@ pub async fn unmount_disk() -> Result<String, String> {
 }
 
 #[tauri::command]
+pub async fn eject_disk(device: String) -> Result<String, String> {
+    // Eject (power down) a disk using diskutil
+    // This is useful for Linux-only disks that aren't auto-ejected
+    tokio::task::spawn_blocking(move || {
+        let output = Command::new("diskutil")
+            .args(["eject", &device])
+            .output()
+            .map_err(|e| format!("Failed to run diskutil: {}", e))?;
+
+        if output.status.success() {
+            Ok(format!("Ejected {}", device))
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(format!("Failed to eject: {}", stderr))
+        }
+    })
+    .await
+    .map_err(|e| format!("Task error: {}", e))?
+}
+
+#[tauri::command]
 pub async fn force_cleanup() -> Result<String, String> {
     // Force kill orphaned anylinuxfs/krun processes
     tokio::task::spawn_blocking(|| {

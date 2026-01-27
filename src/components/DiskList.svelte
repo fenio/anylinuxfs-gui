@@ -5,7 +5,9 @@
 	import PassphraseDialog from './PassphraseDialog.svelte';
 	import { onMount } from 'svelte';
 	import { listen } from '@tauri-apps/api/event';
-	import { startDiskWatcher } from '$lib/api';
+	import { startDiskWatcher, ejectDisk } from '$lib/api';
+
+	let ejectingDevice: string | null = $state(null);
 
 	let passphraseDevice: string | null = $state(null);
 
@@ -58,6 +60,19 @@
 		const checked = (e.target as HTMLInputElement).checked;
 		disks.setAdminMode(checked);
 		disks.refresh(checked);
+	}
+
+	async function handleEject(device: string) {
+		ejectingDevice = device;
+		try {
+			await ejectDisk(device);
+			// Refresh after successful eject
+			disks.refresh();
+		} catch (e) {
+			console.error('Failed to eject:', e);
+		} finally {
+			ejectingDevice = null;
+		}
 	}
 </script>
 
@@ -120,6 +135,18 @@
 						<span class="disk-model">{disk.model}</span>
 					{/if}
 					<span class="disk-size">{disk.size}</span>
+					<button
+						class="eject-btn"
+						onclick={() => handleEject(disk.device)}
+						disabled={ejectingDevice === disk.device}
+						title="Eject disk (safely remove)"
+					>
+						{#if ejectingDevice === disk.device}
+							<span class="spinner small"></span>
+						{:else}
+							⏏
+						{/if}
+					</button>
 				</div>
 				<div class="partitions">
 					{#each disk.partitions as partition}
@@ -330,6 +357,37 @@
 		font-size: 12px;
 		color: var(--text-tertiary);
 		margin-left: auto;
+	}
+
+	.eject-btn {
+		padding: 4px 8px;
+		border-radius: 4px;
+		border: 1px solid var(--border-color);
+		background: var(--button-secondary-bg);
+		color: var(--text-secondary);
+		font-size: 14px;
+		cursor: pointer;
+		transition: all 0.15s;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 32px;
+	}
+
+	.eject-btn:hover:not(:disabled) {
+		background: var(--button-secondary-hover);
+		color: var(--text-primary);
+	}
+
+	.eject-btn:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+
+	.spinner.small {
+		width: 12px;
+		height: 12px;
+		border-width: 2px;
 	}
 
 	.partitions {

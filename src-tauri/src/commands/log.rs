@@ -206,9 +206,22 @@ pub fn start_disk_watcher(app: AppHandle) -> Result<(), String> {
             return;
         }
 
+        // Also watch /dev for physical disk connect/disconnect events
+        // This catches Linux-only disks that don't get mounted to /Volumes
+        let dev_path = PathBuf::from("/dev");
+        if watcher.watch(&dev_path, RecursiveMode::NonRecursive).is_err() {
+            eprintln!("Failed to watch /dev (continuing with /Volumes only)");
+            // Don't return - /Volumes watching is still useful
+        }
+
         // Track pending event - we wait for events to settle before emitting
         let mut pending_event: Option<Instant> = None;
         let settle_duration = Duration::from_millis(1500); // Wait 1.5s after last event
+
+        // Track disk count for polling fallback (for Linux-only disks not in /Volumes)
+        let mut last_disk_count = count_disks();
+        let mut last_poll = Instant::now();
+        let poll_interval = Duration::from_secs(3); // Poll every 3 seconds
 
         loop {
             // Check if we should stop
@@ -220,8 +233,18 @@ pub fn start_disk_watcher(app: AppHandle) -> Result<(), String> {
                 Ok(Ok(event)) => {
                     match event.kind {
                         EventKind::Create(_) | EventKind::Remove(_) => {
-                            // Mark that we have a pending event, reset settle timer
-                            pending_event = Some(Instant::now());
+                            // Filter /dev events to only disk-related changes
+                            let is_disk_event = event.paths.iter().any(|p| {
+                                let path_str = p.to_string_lossy();
+                                // Match /Volumes/* or /dev/disk*
+                                path_str.starts_with("/Volumes/") ||
+                                (path_str.starts_with("/dev/disk") && !path_str.contains("s"))
+                            });
+
+                            if is_disk_event {
+                                // Mark that we have a pending event, reset settle timer
+                                pending_event = Some(Instant::now());
+                            }
                         }
                         _ => {}
                     }
@@ -236,7 +259,19 @@ pub fn start_disk_watcher(app: AppHandle) -> Result<(), String> {
                             // Events have settled, emit and clear
                             let _ = app.emit("disks-changed", ());
                             pending_event = None;
+                            last_disk_count = count_disks(); // Update count after emit
                         }
+                    }
+
+                    // Polling fallback: check disk count periodically
+                    // This catches Linux-only disks that don't trigger /Volumes events
+                    if last_poll.elapsed() >= poll_interval {
+                        let current_count = count_disks();
+                        if current_count != last_disk_count {
+                            pending_event = Some(Instant::now());
+                            last_disk_count = current_count;
+                        }
+                        last_poll = Instant::now();
                     }
                 }
             }
@@ -246,6 +281,24 @@ pub fn start_disk_watcher(app: AppHandle) -> Result<(), String> {
     });
 
     Ok(())
+}
+
+/// Count physical disks by checking /dev/disk* entries
+fn count_disks() -> usize {
+    std::fs::read_dir("/dev")
+        .map(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .filter(|e| {
+                    let name = e.file_name();
+                    let name_str = name.to_string_lossy();
+                    // Match disk0, disk1, etc. but not disk0s1 (partitions)
+                    name_str.starts_with("disk") &&
+                    name_str[4..].chars().all(|c| c.is_ascii_digit())
+                })
+                .count()
+        })
+        .unwrap_or(0)
 }
 
 #[tauri::command]
