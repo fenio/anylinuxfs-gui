@@ -16,9 +16,10 @@ A macOS GUI application for [anylinuxfs](https://github.com/nohajc/anylinuxfs) -
 
 ## Screenshots
 
-<img width="1089" height="906" alt="image" src="https://github.com/user-attachments/assets/a50c98fe-bf7e-414c-9ef0-016bcf1101bb" />
-<img width="1089" height="906" alt="image" src="https://github.com/user-attachments/assets/036ef98d-5b44-45a4-baff-40bb41532878" />
-
+<img width="969" height="890" alt="image" src="https://github.com/user-attachments/assets/e849ea01-1311-4c60-9f73-5e52662d4766" />
+<img width="969" height="890" alt="image" src="https://github.com/user-attachments/assets/64f99b5c-dc1a-4ac4-95b0-d4f8bfc298b6" />
+<img width="969" height="890" alt="image" src="https://github.com/user-attachments/assets/37ffb162-1c93-44f0-b858-b2bf2cb15fbb" />
+<img width="969" height="890" alt="image" src="https://github.com/user-attachments/assets/ae5a5475-4c76-4125-b19c-a628e8fca0c1" />
 
 ## Requirements
 
