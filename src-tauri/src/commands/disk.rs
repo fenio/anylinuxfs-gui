@@ -38,20 +38,20 @@ pub async fn list_disks(use_sudo: bool) -> Result<DiskListResult, String> {
     tokio::task::spawn_blocking(move || {
         // Run both list commands and merge results:
         // - `list` (native): correctly detects Linux filesystems on Linux-only cards
-        // - `list -m` (macOS fallback): works with broken GUID tables
+        // - `list -m` (Microsoft fallback): works with broken GUID tables
 
         // First, try native detection (without -m)
         let native_result = execute_command(&["list"], use_sudo, None)
             .ok()
             .and_then(|output| parse_disk_list_output(&output).ok());
 
-        // Then get macOS fallback (with -m)
-        let macos_result = execute_command(&["list", "-m"], use_sudo, None)
+        // Then get MS fallback (with -m)
+        let ms_result = execute_command(&["list", "-m"], use_sudo, None)
             .ok()
             .and_then(|output| parse_disk_list_output(&output).ok());
 
-        // Merge results: prefer native detection, add macOS-only disks
-        let mut result = merge_disk_results(native_result, macos_result);
+        // Merge results: prefer native detection, add MS-only disks
+        let mut result = merge_disk_results(native_result, ms_result);
 
         // Check which partitions are already mounted by the system
         update_mount_status(&mut result);
@@ -73,7 +73,7 @@ pub async fn list_disks(use_sudo: bool) -> Result<DiskListResult, String> {
 
 fn merge_disk_results(
     native: Option<DiskListResult>,
-    macos: Option<DiskListResult>,
+    ms: Option<DiskListResult>,
 ) -> DiskListResult {
     use std::collections::HashMap;
 
@@ -86,16 +86,16 @@ fn merge_disk_results(
         }
     }
 
-    // Then, add disks from macOS fallback that weren't in native
+    // Then, add disks from MS fallback that weren't in native
     // For disks that exist in both, merge partitions preferring native filesystem detection
-    if let Some(macos_result) = macos {
-        for macos_disk in macos_result.disks {
-            if let Some(native_disk) = disk_map.get_mut(&macos_disk.device) {
+    if let Some(ms_result) = ms {
+        for ms_disk in ms_result.disks {
+            if let Some(native_disk) = disk_map.get_mut(&ms_disk.device) {
                 // Disk exists in both - merge partitions
-                merge_partitions(native_disk, macos_disk);
+                merge_partitions(native_disk, ms_disk);
             } else {
-                // Disk only in macOS result - add it
-                disk_map.insert(macos_disk.device.clone(), macos_disk);
+                // Disk only in MS result - add it
+                disk_map.insert(ms_disk.device.clone(), ms_disk);
             }
         }
     }
@@ -111,7 +111,7 @@ fn merge_disk_results(
     }
 }
 
-fn merge_partitions(native_disk: &mut Disk, macos_disk: Disk) {
+fn merge_partitions(native_disk: &mut Disk, ms_disk: Disk) {
     use std::collections::HashMap;
 
     // Build map of native partitions by device
@@ -120,21 +120,21 @@ fn merge_partitions(native_disk: &mut Disk, macos_disk: Disk) {
         partition_map.insert(partition.device.clone(), partition);
     }
 
-    // Merge with macOS partitions
-    for macos_partition in macos_disk.partitions {
-        if let Some(native_partition) = partition_map.get_mut(&macos_partition.device) {
+    // Merge with MS partitions
+    for ms_partition in ms_disk.partitions {
+        if let Some(native_partition) = partition_map.get_mut(&ms_partition.device) {
             // Partition exists in both - prefer native filesystem if it's a known Linux type
-            // Otherwise use macOS detection
+            // Otherwise use MS detection
             if !is_linux_native_fs(&native_partition.filesystem)
                 && native_partition.filesystem == "Microsoft Basic Data"
             {
-                // Native showed generic type, use macOS detection
-                native_partition.filesystem = macos_partition.filesystem;
-                native_partition.label = macos_partition.label;
+                // Native showed generic type, use MS detection
+                native_partition.filesystem = ms_partition.filesystem;
+                native_partition.label = ms_partition.label;
             }
         } else {
-            // Partition only in macOS result - add it
-            partition_map.insert(macos_partition.device.clone(), macos_partition);
+            // Partition only in MS result - add it
+            partition_map.insert(ms_partition.device.clone(), ms_partition);
         }
     }
 
