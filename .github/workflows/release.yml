@@ -72,27 +72,35 @@ jobs:
           cd homebrew-tap
 
           # Update cask file
-          cat > Casks/anylinuxfs-gui.rb << EOF
-          cask "anylinuxfs-gui" do
-            version "${VERSION}"
-            sha256 "${SHA256}"
+          cat > Casks/anylinuxfs-gui.rb << 'EOF'
+cask "anylinuxfs-gui" do
+  version "${VERSION}"
+  sha256 "${SHA256}"
 
-            url "https://github.com/fenio/anylinuxfs-gui/releases/download/v#{version}/anylinuxfs-gui_#{version}_aarch64.dmg"
-            name "anylinuxfs GUI"
-            desc "macOS GUI for anylinuxfs - mount Linux filesystems on macOS"
-            homepage "https://github.com/fenio/anylinuxfs-gui"
+  url "https://github.com/fenio/anylinuxfs-gui/releases/download/v#{version}/anylinuxfs-gui_#{version}_aarch64.dmg"
+  name "anylinuxfs GUI"
+  desc "macOS GUI for anylinuxfs - mount Linux filesystems on macOS"
+  homepage "https://github.com/fenio/anylinuxfs-gui"
 
-            depends_on formula: "nohajc/anylinuxfs/anylinuxfs"
-            depends_on arch: :arm64
+  depends_on formula: "nohajc/anylinuxfs/anylinuxfs"
+  depends_on arch: :arm64
 
-            app "anylinuxfs-gui.app"
+  app "anylinuxfs-gui.app"
 
-            zap trash: [
-              "~/Library/Caches/com.anylinuxfs.gui",
-              "~/Library/Preferences/com.anylinuxfs.gui.plist",
-            ]
-          end
-          EOF
+  postflight do
+    system_command "/usr/bin/xattr",
+                   args: ["-cr", "#{appdir}/anylinuxfs-gui.app"]
+  end
+
+  zap trash: [
+    "~/Library/Caches/com.anylinuxfs.gui",
+    "~/Library/Preferences/com.anylinuxfs.gui.plist",
+  ]
+end
+EOF
+          # Replace version/sha placeholders
+          sed -i '' "s/\${VERSION}/${VERSION}/g" Casks/anylinuxfs-gui.rb
+          sed -i '' "s/\${SHA256}/${SHA256}/g" Casks/anylinuxfs-gui.rb
 
           # Commit and push
           git config user.name "github-actions[bot]"
