@@ -2,28 +2,28 @@
 	import { config } from '$lib/stores/config';
 	import { onMount } from 'svelte';
 
-	let ramMb = $state(2048);
-	let vcpus = $state(2);
-	let logLevel = $state('info');
+	let ramMb = $state(1024);
+	let vcpus = $state(1);
+	let logLevel = $state('off');
 	let hasChanges = $state(false);
 
 	const logLevels = ['off', 'error', 'warn', 'info', 'debug', 'trace'];
-	const ramOptions = [512, 1024, 2048, 4096, 8192, 16384];
-	const vcpuOptions = [1, 2, 4, 8, 16];
 
 	onMount(() => {
 		config.load();
 	});
 
 	$effect(() => {
-		if ($config.config.ram_mb !== null) {
-			ramMb = $config.config.ram_mb;
-		}
-		if ($config.config.vcpus !== null) {
-			vcpus = $config.config.vcpus;
-		}
-		if ($config.config.log_level !== null) {
-			logLevel = $config.config.log_level;
+		// Extract config to ensure store is tracked
+		const cfg = $config.config;
+		const loading = $config.loading;
+
+		// Sync from config when loading completes
+		if (!loading) {
+			ramMb = cfg.ram_mb ?? 1024;
+			vcpus = cfg.vcpus ?? 1;
+			logLevel = cfg.log_level ?? 'off';
+			hasChanges = false;
 		}
 	});
 
@@ -33,9 +33,9 @@
 			(cfg.ram_mb !== null && ramMb !== cfg.ram_mb) ||
 			(cfg.vcpus !== null && vcpus !== cfg.vcpus) ||
 			(cfg.log_level !== null && logLevel !== cfg.log_level) ||
-			(cfg.ram_mb === null && ramMb !== 2048) ||
-			(cfg.vcpus === null && vcpus !== 2) ||
-			(cfg.log_level === null && logLevel !== 'info');
+			(cfg.ram_mb === null && ramMb !== 1024) ||
+			(cfg.vcpus === null && vcpus !== 1) ||
+			(cfg.log_level === null && logLevel !== 'off');
 	}
 
 	async function handleSave() {
@@ -45,17 +45,10 @@
 
 	function handleReset() {
 		const cfg = $config.config;
-		ramMb = cfg.ram_mb ?? 2048;
-		vcpus = cfg.vcpus ?? 2;
-		logLevel = cfg.log_level ?? 'info';
+		ramMb = cfg.ram_mb ?? 1024;
+		vcpus = cfg.vcpus ?? 1;
+		logLevel = cfg.log_level ?? 'off';
 		hasChanges = false;
-	}
-
-	function formatRam(mb: number): string {
-		if (mb >= 1024) {
-			return `${mb / 1024} GB`;
-		}
-		return `${mb} MB`;
 	}
 </script>
 
@@ -81,29 +74,31 @@
 
 				<div class="setting">
 					<label for="ram">Memory (RAM)</label>
-					<select
-						id="ram"
-						bind:value={ramMb}
-						onchange={checkChanges}
-					>
-						{#each ramOptions as option}
-							<option value={option}>{formatRam(option)}</option>
-						{/each}
-					</select>
+					<div class="input-with-unit">
+						<input
+							type="number"
+							id="ram"
+							bind:value={ramMb}
+							oninput={checkChanges}
+							min="256"
+							max="65536"
+							step="128"
+						/>
+						<span class="unit">MB</span>
+					</div>
 					<span class="hint">More RAM improves performance for large file operations.</span>
 				</div>
 
 				<div class="setting">
 					<label for="vcpus">vCPUs</label>
-					<select
+					<input
+						type="number"
 						id="vcpus"
 						bind:value={vcpus}
-						onchange={checkChanges}
-					>
-						{#each vcpuOptions as option}
-							<option value={option}>{option} {option === 1 ? 'core' : 'cores'}</option>
-						{/each}
-					</select>
+						oninput={checkChanges}
+						min="1"
+						max="32"
+					/>
 					<span class="hint">More cores improve parallel file operations.</span>
 				</div>
 			</div>
@@ -240,6 +235,7 @@
 		margin-bottom: 6px;
 	}
 
+	.setting input[type='number'],
 	.setting select {
 		width: 100%;
 		max-width: 200px;
@@ -249,12 +245,34 @@
 		font-size: 14px;
 		background: var(--input-bg);
 		color: var(--text-primary);
+	}
+
+	.setting select {
 		cursor: pointer;
 	}
 
+	.setting input[type='number']:focus,
 	.setting select:focus {
 		border-color: var(--accent-color);
 		outline: none;
+	}
+
+	.input-with-unit {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		max-width: 200px;
+	}
+
+	.input-with-unit input {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.input-with-unit .unit {
+		font-size: 13px;
+		color: var(--text-secondary);
+		white-space: nowrap;
 	}
 
 	.setting .hint {

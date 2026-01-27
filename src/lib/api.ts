@@ -52,3 +52,48 @@ export async function updateConfig(
 		logLevel: logLevel ?? null
 	});
 }
+
+export async function startShell(): Promise<void> {
+	return await invoke<void>('start_shell');
+}
+
+export async function writeShell(data: string): Promise<void> {
+	return await invoke<void>('write_shell', { data });
+}
+
+export async function resizeShell(rows: number, cols: number): Promise<void> {
+	return await invoke<void>('resize_shell', { rows, cols });
+}
+
+export async function stopShell(): Promise<void> {
+	return await invoke<void>('stop_shell');
+}
+
+export interface VmImage {
+	name: string;
+	installed: boolean;
+}
+
+export async function listImages(): Promise<VmImage[]> {
+	return await invoke<VmImage[]>('list_images');
+}
+
+export async function installImage(name: string): Promise<void> {
+	return await invoke<void>('install_image', { name });
+}
+
+export async function uninstallImage(name: string): Promise<void> {
+	return await invoke<void>('uninstall_image', { name });
+}
+
+export async function listPackages(): Promise<string[]> {
+	return await invoke<string[]>('list_packages');
+}
+
+export async function addPackages(packages: string[]): Promise<void> {
+	return await invoke<void>('add_packages', { packages });
+}
+
+export async function removePackages(packages: string[]): Promise<void> {
+	return await invoke<void>('remove_packages', { packages });
+}

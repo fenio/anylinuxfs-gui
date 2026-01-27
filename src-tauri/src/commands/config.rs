@@ -1,15 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::PathBuf;
 use crate::cli::execute_command;
-
-fn get_config_path() -> PathBuf {
-    if let Some(home) = dirs::home_dir() {
-        home.join(".anylinuxfs/config.toml")
-    } else {
-        PathBuf::from("/tmp/anylinuxfs-config.toml")
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
@@ -60,16 +50,13 @@ where
 
 #[tauri::command]
 pub fn get_config() -> Result<AppConfig, String> {
-    let config_path = get_config_path();
+    // Run `anylinuxfs config` to get full config with defaults
+    let output = execute_command(&["config"], false, None)?;
 
-    if !config_path.exists() {
-        return Ok(AppConfig::default());
-    }
+    // Fix unquoted string values (CLI outputs `log_level = off` instead of `log_level = "off"`)
+    let fixed_output = fix_unquoted_strings(&output);
 
-    let content = fs::read_to_string(&config_path)
-        .map_err(|e| format!("Failed to read config: {}", e))?;
-
-    let toml_config: TomlConfig = toml::from_str(&content)
+    let toml_config: TomlConfig = toml::from_str(&fixed_output)
         .map_err(|e| format!("Failed to parse config: {}", e))?;
 
     Ok(AppConfig {
@@ -79,23 +66,64 @@ pub fn get_config() -> Result<AppConfig, String> {
     })
 }
 
-// Valid configuration values (must match frontend options)
-const VALID_RAM_OPTIONS: &[u32] = &[512, 1024, 2048, 4096, 8192, 16384];
-const VALID_VCPU_OPTIONS: &[u32] = &[1, 2, 4, 8, 16];
+fn fix_unquoted_strings(input: &str) -> String {
+    // Fix unquoted string values in TOML output from anylinuxfs CLI
+    input
+        .lines()
+        .map(|line| {
+            let trimmed = line.trim();
+            // Skip section headers, empty lines, comments
+            if trimmed.starts_with('[') || trimmed.is_empty() || trimmed.starts_with('#') {
+                return line.to_string();
+            }
+
+            if let Some(eq_pos) = trimmed.find('=') {
+                let key = trimmed[..eq_pos].trim();
+                let value = trimmed[eq_pos + 1..].trim();
+
+                // Skip if already quoted, empty, array, or looks like a number/boolean
+                if value.is_empty()
+                    || value.starts_with('"')
+                    || value.starts_with('\'')
+                    || value.starts_with('[')
+                    || value.starts_with('{')
+                    || value == "true"
+                    || value == "false"
+                    || value.parse::<i64>().is_ok()
+                    || value.parse::<f64>().is_ok()
+                {
+                    return line.to_string();
+                }
+
+                // Quote the unquoted string value
+                return format!("{} = \"{}\"", key, value);
+            }
+
+            line.to_string()
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+// Valid configuration ranges
+const MIN_RAM_MB: u32 = 256;
+const MAX_RAM_MB: u32 = 65536;
+const MIN_VCPUS: u32 = 1;
+const MAX_VCPUS: u32 = 32;
 const VALID_LOG_LEVELS: &[&str] = &["off", "error", "warn", "info", "debug", "trace"];
 
 #[tauri::command]
 pub async fn update_config(ram_mb: Option<u32>, vcpus: Option<u32>, log_level: Option<String>) -> Result<(), String> {
     // Validate inputs before running commands
     if let Some(ram) = ram_mb {
-        if !VALID_RAM_OPTIONS.contains(&ram) {
-            return Err(format!("Invalid RAM value: {}MB. Valid options: {:?}", ram, VALID_RAM_OPTIONS));
+        if ram < MIN_RAM_MB || ram > MAX_RAM_MB {
+            return Err(format!("Invalid RAM value: {}MB. Must be between {} and {} MB.", ram, MIN_RAM_MB, MAX_RAM_MB));
         }
     }
 
     if let Some(cpus) = vcpus {
-        if !VALID_VCPU_OPTIONS.contains(&cpus) {
-            return Err(format!("Invalid vCPU value: {}. Valid options: {:?}", cpus, VALID_VCPU_OPTIONS));
+        if cpus < MIN_VCPUS || cpus > MAX_VCPUS {
+            return Err(format!("Invalid vCPU value: {}. Must be between {} and {}.", cpus, MIN_VCPUS, MAX_VCPUS));
         }
     }
 

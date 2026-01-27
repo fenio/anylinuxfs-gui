@@ -11,6 +11,16 @@ const SOCKET_PATH: &str = "/tmp/anylinuxfs.sock";
 pub struct CliStatus {
     pub available: bool,
     pub path: String,
+    pub initialized: bool,
+}
+
+fn check_vm_initialized() -> bool {
+    // Check if the Alpine rootfs exists, indicating the VM has been initialized
+    if let Some(home) = dirs::home_dir() {
+        home.join(".anylinuxfs/alpine/rootfs").exists()
+    } else {
+        false
+    }
 }
 
 #[tauri::command]
@@ -20,6 +30,7 @@ pub fn check_cli() -> CliStatus {
         path: cli::get_path()
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|| "not found".to_string()),
+        initialized: check_vm_initialized(),
     }
 }
 

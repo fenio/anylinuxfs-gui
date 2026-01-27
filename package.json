@@ -1,6 +1,6 @@
 {
   "name": "anylinuxfs-gui",
-  "version": "0.1.1",
+  "version": "0.1.5",
   "private": true,
   "type": "module",
   "scripts": {
@@ -13,7 +13,9 @@
     "tauri:build": "tauri build"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2"
+    "@tauri-apps/api": "^2",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3",

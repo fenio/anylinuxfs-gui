@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.5] - 2025-01-27
+
+### Added
+- Embedded VM shell with xterm.js terminal emulator
+- VM Images management page (install/uninstall alpine, freebsd images)
+- Alpine packages management page (add/remove custom apk packages)
+- First-run detection with setup info banner
+- Free-form RAM/vCPU input (no longer constrained to dropdown options)
+
+### Changed
+- Settings now reads config from CLI (shows actual values including defaults)
+- Shell auto-starts when navigating to Shell page (if no filesystem mounted)
+- Improved CLI not found message
+
+### Fixed
+- Config parsing for unquoted string values from CLI output
+- Init banner now disappears after VM initialization completes
+
 ## [0.1.1] - 2025-01-27
 
 ### Security

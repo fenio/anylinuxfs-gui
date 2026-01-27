@@ -43,4 +43,5 @@ export interface AppConfig {
 export interface CliStatus {
 	available: boolean;
 	path: string;
+	initialized: boolean;
 }

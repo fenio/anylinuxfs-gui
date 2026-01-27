@@ -3,6 +3,9 @@
 
 	const navItems = [
 		{ path: '/', label: 'Disks', icon: 'disk' },
+		{ path: '/shell', label: 'Shell', icon: 'shell' },
+		{ path: '/images', label: 'Images', icon: 'image' },
+		{ path: '/packages', label: 'Packages', icon: 'package' },
 		{ path: '/logs', label: 'Logs', icon: 'log' },
 		{ path: '/settings', label: 'Settings', icon: 'settings' }
 	];
@@ -114,7 +117,7 @@
 	}
 
 	.nav-icon[data-icon='disk']::before {
-		content: '\1F4BF';
+		content: '\1F4BE';
 	}
 
 	.nav-icon[data-icon='log']::before {
@@ -124,5 +127,20 @@
 	.nav-icon[data-icon='settings']::before {
 		content: '\2699';
 		font-size: 20px;
+	}
+
+	.nav-icon[data-icon='shell']::before {
+		content: '>';
+		font-family: monospace;
+		font-weight: bold;
+		font-size: 16px;
+	}
+
+	.nav-icon[data-icon='image']::before {
+		content: '\1F4BF';
+	}
+
+	.nav-icon[data-icon='package']::before {
+		content: '\1F4E6';
 	}
 </style>
