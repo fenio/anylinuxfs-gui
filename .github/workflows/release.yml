@@ -1,0 +1,99 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: macos-14  # Apple Silicon runner
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Tauri app
+        run: npm run tauri:build
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Calculate DMG checksum
+        id: checksum
+        run: |
+          DMG_PATH="src-tauri/target/release/bundle/dmg/anylinuxfs-gui_${{ steps.version.outputs.VERSION }}_aarch64.dmg"
+          SHA256=$(shasum -a 256 "$DMG_PATH" | cut -d ' ' -f 1)
+          echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
+          echo "DMG_PATH=$DMG_PATH" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.checksum.outputs.DMG_PATH }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Homebrew cask
+        if: success()
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "$HOMEBREW_TAP_TOKEN" ]; then
+            echo "HOMEBREW_TAP_TOKEN not set, skipping cask update"
+            exit 0
+          fi
+
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          SHA256="${{ steps.checksum.outputs.SHA256 }}"
+
+          # Clone homebrew-tap repo
+          git clone https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/fenio/homebrew-tap.git
+          cd homebrew-tap
+
+          # Update cask file
+          cat > Casks/anylinuxfs-gui.rb << EOF
+          cask "anylinuxfs-gui" do
+            version "${VERSION}"
+            sha256 "${SHA256}"
+
+            url "https://github.com/fenio/anylinuxfs-gui/releases/download/v#{version}/anylinuxfs-gui_#{version}_aarch64.dmg"
+            name "anylinuxfs GUI"
+            desc "macOS GUI for anylinuxfs - mount Linux filesystems on macOS"
+            homepage "https://github.com/fenio/anylinuxfs-gui"
+
+            depends_on formula: "nohajc/anylinuxfs/anylinuxfs"
+            depends_on arch: :arm64
+
+            app "anylinuxfs-gui.app"
+
+            zap trash: [
+              "~/Library/Caches/com.anylinuxfs.gui",
+              "~/Library/Preferences/com.anylinuxfs.gui.plist",
+            ]
+          end
+          EOF
+
+          # Commit and push
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/anylinuxfs-gui.rb
+          git commit -m "Update anylinuxfs-gui to v${VERSION}"
+          git push
