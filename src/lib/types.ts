@@ -14,6 +14,7 @@ export interface Disk {
 	device: string;
 	size: string;
 	model: string | null;
+	is_external: boolean;
 	partitions: Partition[];
 }
 

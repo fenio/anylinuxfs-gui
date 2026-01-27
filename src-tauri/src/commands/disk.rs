@@ -22,6 +22,7 @@ pub struct Disk {
     pub device: String,
     pub size: String,
     pub model: Option<String>,
+    pub is_external: bool,
     pub partitions: Vec<Partition>,
 }
 
@@ -354,20 +355,23 @@ fn parse_disk_list_output(output: &str) -> Result<DiskListResult, String> {
             let device = line.split_whitespace().next().unwrap_or("").to_string();
 
             // Extract info from parentheses
-            let model = if let Some(start) = line.find('(') {
+            let (model, is_external) = if let Some(start) = line.find('(') {
                 if let Some(end) = line.find(')') {
-                    Some(line[start+1..end].to_string())
+                    let info = line[start+1..end].to_string();
+                    let external = info.to_lowercase().contains("external");
+                    (Some(info), external)
                 } else {
-                    None
+                    (None, false)
                 }
             } else {
-                None
+                (None, false)
             };
 
             current_disk = Some(Disk {
                 device,
                 size: String::new(), // Will be set from partition 0
                 model,
+                is_external,
                 partitions: Vec::new(),
             });
         } else if line.trim().starts_with("#:") {
@@ -554,8 +558,23 @@ pub async fn unmount_disk() -> Result<String, String> {
 #[tauri::command]
 pub async fn eject_disk(device: String) -> Result<String, String> {
     // Eject (power down) a disk using diskutil
-    // This is useful for Linux-only disks that aren't auto-ejected
+    // First unmount anylinuxfs if it has anything mounted, then eject
     tokio::task::spawn_blocking(move || {
+        // Check if anylinuxfs has anything mounted and unmount first
+        if check_nfs_mount_exists() {
+            // Unmount anylinuxfs first - this shuts down the VM properly
+            let _ = execute_command(&["unmount"], false, None);
+
+            // Wait for anylinuxfs to fully stop (up to 5 seconds)
+            for _ in 0..10 {
+                thread::sleep(Duration::from_millis(500));
+                if !check_nfs_mount_exists() {
+                    break;
+                }
+            }
+        }
+
+        // Now safe to eject the disk
         let output = Command::new("diskutil")
             .args(["eject", &device])
             .output()

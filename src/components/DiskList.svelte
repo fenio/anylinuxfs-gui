@@ -135,18 +135,20 @@
 						<span class="disk-model">{disk.model}</span>
 					{/if}
 					<span class="disk-size">{disk.size}</span>
-					<button
-						class="eject-btn"
-						onclick={() => handleEject(disk.device)}
-						disabled={ejectingDevice === disk.device}
-						title="Eject disk (safely remove)"
-					>
-						{#if ejectingDevice === disk.device}
-							<span class="spinner small"></span>
-						{:else}
-							⏏
-						{/if}
-					</button>
+					{#if disk.is_external}
+						<button
+							class="eject-btn"
+							onclick={() => handleEject(disk.device)}
+							disabled={ejectingDevice === disk.device}
+							title="Eject disk (safely remove)"
+						>
+							{#if ejectingDevice === disk.device}
+								<span class="spinner small"></span>
+							{:else}
+								⏏
+							{/if}
+						</button>
+					{/if}
 				</div>
 				<div class="partitions">
 					{#each disk.partitions as partition}
