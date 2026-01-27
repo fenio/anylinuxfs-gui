@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.6] - 2025-01-27
+
+### Fixed
+- Ad-hoc code signing to reduce Gatekeeper issues
+- Homebrew cask now auto-removes quarantine attribute on install
+
 ## [0.1.5] - 2025-01-27
 
 ### Added
