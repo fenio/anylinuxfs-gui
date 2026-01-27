@@ -34,14 +34,23 @@ jobs:
       - name: Build Tauri app
         run: npm run tauri:build
 
-      - name: Ad-hoc sign the app
-        run: |
-          codesign --force --deep --sign - "src-tauri/target/release/bundle/macos/anylinuxfs-gui.app"
-          codesign --verify --verbose "src-tauri/target/release/bundle/macos/anylinuxfs-gui.app"
-
       - name: Get version from tag
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Ad-hoc sign and recreate DMG
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          APP_PATH="src-tauri/target/release/bundle/macos/anylinuxfs-gui.app"
+          DMG_PATH="src-tauri/target/release/bundle/dmg/anylinuxfs-gui_${VERSION}_aarch64.dmg"
+
+          # Sign the app
+          codesign --force --deep --sign - "$APP_PATH"
+          codesign --verify --verbose "$APP_PATH"
+
+          # Recreate DMG with signed app
+          rm -f "$DMG_PATH"
+          hdiutil create -volname "anylinuxfs-gui" -srcfolder "$APP_PATH" -ov -format UDZO "$DMG_PATH"
 
       - name: Calculate DMG checksum
         id: checksum
@@ -72,12 +81,10 @@ jobs:
           VERSION="${{ steps.version.outputs.VERSION }}"
           SHA256="${{ steps.checksum.outputs.SHA256 }}"
 
-          # Clone homebrew-tap repo
           git clone https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/fenio/homebrew-tap.git
           cd homebrew-tap
 
-          # Update cask file
-          cat > Casks/anylinuxfs-gui.rb << 'EOF'
+          cat > Casks/anylinuxfs-gui.rb << CASKEOF
 cask "anylinuxfs-gui" do
   version "${VERSION}"
   sha256 "${SHA256}"
@@ -102,12 +109,8 @@ cask "anylinuxfs-gui" do
     "~/Library/Preferences/com.anylinuxfs.gui.plist",
   ]
 end
-EOF
-          # Replace version/sha placeholders
-          sed -i '' "s/\${VERSION}/${VERSION}/g" Casks/anylinuxfs-gui.rb
-          sed -i '' "s/\${SHA256}/${SHA256}/g" Casks/anylinuxfs-gui.rb
+CASKEOF
 
-          # Commit and push
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Casks/anylinuxfs-gui.rb
