@@ -1,6 +1,4 @@
-<p align="center">
-  <img src="tuxdrive.png" width="128" height="128" alt="anylinuxfs GUI">
-</p>
+<img src="tuxdrive.png" width="96" height="96" alt="anylinuxfs GUI" align="left">
 
 # anylinuxfs GUI
 
