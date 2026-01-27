@@ -22,6 +22,7 @@ impl Default for PtyState {
 pub async fn start_shell(
     app: AppHandle,
     state: tauri::State<'_, Arc<Mutex<PtyState>>>,
+    image: Option<String>,
 ) -> Result<(), String> {
     let cli_path = get_path()
         .ok_or_else(|| "anylinuxfs CLI not found".to_string())?;
@@ -39,6 +40,12 @@ pub async fn start_shell(
 
     let mut cmd = CommandBuilder::new(cli_path);
     cmd.arg("shell");
+
+    // Add image option if specified
+    if let Some(ref img) = image {
+        cmd.arg("-i");
+        cmd.arg(img);
+    }
 
     let mut child = pair
         .slave

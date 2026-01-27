@@ -12,6 +12,7 @@
 	let running = $state(false);
 	let error = $state<string | null>(null);
 	let isMounted = $state(false);
+	let selectedImage = $state('alpine');
 	let unlistenOutput: (() => void) | null = null;
 	let unlistenExit: (() => void) | null = null;
 
@@ -121,10 +122,10 @@
 
 		error = null;
 		terminal?.clear();
-		terminal?.writeln('Starting shell...\r\n');
+		terminal?.writeln(`Starting ${selectedImage} shell...\r\n`);
 
 		try {
-			await startShell();
+			await startShell(selectedImage);
 			running = true;
 			// Send initial resize
 			if (terminal) {
@@ -160,6 +161,10 @@
 			{#if isMounted}
 				<span class="status-badge warning">Filesystem mounted</span>
 			{:else if !running}
+				<select class="image-select" bind:value={selectedImage}>
+					<option value="alpine">Alpine Linux</option>
+					<option value="freebsd">FreeBSD</option>
+				</select>
 				<button class="btn-primary" onclick={handleStart}>Start Shell</button>
 			{:else}
 				<span class="status-badge">Connected</span>
@@ -238,6 +243,20 @@
 		color: #92400e;
 		font-size: 13px;
 		margin-bottom: 16px;
+	}
+
+	.image-select {
+		padding: 6px 10px;
+		border-radius: 6px;
+		border: 1px solid var(--border-color);
+		background: var(--button-secondary-bg);
+		color: var(--text-primary);
+		font-size: 13px;
+		cursor: pointer;
+	}
+
+	.image-select:hover {
+		background: var(--button-secondary-hover);
 	}
 
 	.btn-primary,

@@ -57,8 +57,8 @@ export async function updateConfig(
 	});
 }
 
-export async function startShell(): Promise<void> {
-	return await invoke<void>('start_shell');
+export async function startShell(image?: string): Promise<void> {
+	return await invoke<void>('start_shell', { image: image || null });
 }
 
 export async function writeShell(data: string): Promise<void> {
