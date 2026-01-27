@@ -37,11 +37,22 @@ A macOS GUI application for [anylinuxfs](https://github.com/nohajc/anylinuxfs) -
 brew install fenio/tap/anylinuxfs-gui
 ```
 
+If you get "damaged" or Gatekeeper warnings, run:
+```bash
+xattr -cr /Applications/anylinuxfs-gui.app
+```
+
 ### Manual
 
 Download the latest DMG from [Releases](../../releases), open it, and drag the app to Applications.
 
-On first launch, right-click the app and select "Open" to bypass Gatekeeper (the app is not notarized).
+**Important:** The app is not notarized by Apple. After installation, remove the quarantine attribute:
+
+```bash
+xattr -cr /Applications/anylinuxfs-gui.app
+```
+
+Then you can open the app normally.
 
 ## Building from Source
 
