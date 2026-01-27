@@ -4,12 +4,15 @@ A macOS GUI application for [anylinuxfs](https://github.com/nohajc/anylinuxfs) -
 
 ## Features
 
-- Browse and mount Linux disk partitions
-- Support for encrypted drives (LUKS/BitLocker)
-- Real-time mount status monitoring
-- Log viewer with follow mode
-- VM configuration (RAM, vCPUs, log level)
-- Native macOS look and feel (light/dark mode)
+- **Disk Management** - Browse and mount Linux partitions (ext2/3/4, btrfs, XFS, ZFS, etc.)
+- **Encrypted Drives** - Support for LUKS and BitLocker encrypted volumes
+- **Embedded VM Shell** - Interactive terminal to the Linux VM with xterm.js
+- **Image Management** - Install/uninstall VM images (Alpine Linux, FreeBSD for ZFS)
+- **Package Management** - Add/remove custom Alpine packages to extend VM capabilities
+- **Real-time Monitoring** - Live mount status and log viewer with follow mode
+- **VM Configuration** - Customize RAM, vCPUs, and log verbosity
+- **Auto-refresh** - Disk list updates automatically when drives are connected/ejected
+- **Native macOS** - Light/dark mode support, Apple Silicon optimized
 
 ## Screenshots
 
