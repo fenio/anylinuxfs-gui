@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+build/
+dist/
+.svelte-kit/
+
+# Rust/Tauri
+src-tauri/target/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.*

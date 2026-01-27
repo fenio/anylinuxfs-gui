@@ -1,0 +1,27 @@
+{
+  "name": "anylinuxfs-gui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build && npm run fix-paths",
+    "fix-paths": "for f in build/*.html; do sed -i '' 's|href=\"/|href=\"./|g; s|src=\"/|src=\"./|g; s|import(\"/|import(\"./|g' \"$f\"; done",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-static": "^3",
+    "@sveltejs/kit": "^2",
+    "@sveltejs/vite-plugin-svelte": "^4",
+    "@tauri-apps/cli": "^2",
+    "svelte": "^5",
+    "typescript": "^5",
+    "vite": "^5"
+  }
+}

@@ -1,0 +1,145 @@
+/* macOS-inspired design tokens */
+:root {
+	/* Colors - Light Mode */
+	--bg-primary: #f5f5f7;
+	--sidebar-bg: #f0f0f2;
+	--card-bg: #ffffff;
+	--log-bg: #1e1e1e;
+
+	--text-primary: #1d1d1f;
+	--text-secondary: #6e6e73;
+	--text-tertiary: #8e8e93;
+
+	--border-color: #d2d2d7;
+	--border-hover: #8e8e93;
+
+	--accent-color: #007aff;
+	--accent-hover: #0056b3;
+	--accent-shadow: rgba(0, 122, 255, 0.2);
+
+	--success-color: #34c759;
+	--success-bg: rgba(52, 199, 89, 0.1);
+	--success-border: rgba(52, 199, 89, 0.3);
+
+	--warning-color: #ff9500;
+	--warning-bg: rgba(255, 149, 0, 0.1);
+
+	--error-color: #ff3b30;
+	--error-bg: rgba(255, 59, 48, 0.1);
+	--error-border: rgba(255, 59, 48, 0.3);
+
+	--neutral-bg: #f5f5f7;
+	--hover-bg: rgba(0, 0, 0, 0.05);
+
+	--badge-bg: rgba(0, 0, 0, 0.06);
+
+	--button-secondary-bg: #ffffff;
+	--button-secondary-hover: #f5f5f7;
+
+	--input-bg: #ffffff;
+
+	--log-line-border: rgba(255, 255, 255, 0.1);
+	--log-line-hover: rgba(255, 255, 255, 0.05);
+	--log-text: #e0e0e0;
+	--log-text-secondary: #888888;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+	:root {
+		--bg-primary: #1c1c1e;
+		--sidebar-bg: #2c2c2e;
+		--card-bg: #2c2c2e;
+		--log-bg: #1c1c1e;
+
+		--text-primary: #f5f5f7;
+		--text-secondary: #aeaeb2;
+		--text-tertiary: #636366;
+
+		--border-color: #38383a;
+		--border-hover: #5c5c5e;
+
+		--success-bg: rgba(52, 199, 89, 0.15);
+		--success-border: rgba(52, 199, 89, 0.4);
+
+		--warning-bg: rgba(255, 149, 0, 0.15);
+
+		--error-bg: rgba(255, 59, 48, 0.15);
+		--error-border: rgba(255, 59, 48, 0.4);
+
+		--neutral-bg: #2c2c2e;
+		--hover-bg: rgba(255, 255, 255, 0.1);
+
+		--badge-bg: rgba(255, 255, 255, 0.1);
+
+		--button-secondary-bg: #3a3a3c;
+		--button-secondary-hover: #48484a;
+
+		--input-bg: #3a3a3c;
+
+		--log-line-border: rgba(255, 255, 255, 0.05);
+		--log-line-hover: rgba(255, 255, 255, 0.08);
+		--log-text: #e0e0e0;
+		--log-text-secondary: #888888;
+	}
+}
+
+/* Reset and base styles */
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+	margin: 0;
+	padding: 0;
+}
+
+html,
+body {
+	height: 100%;
+	font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+	font-size: 14px;
+	line-height: 1.5;
+	color: var(--text-primary);
+	background: var(--bg-primary);
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+/* Prevent text selection in UI elements */
+button,
+label,
+nav {
+	user-select: none;
+}
+
+/* Focus styles */
+:focus-visible {
+	outline: 2px solid var(--accent-color);
+	outline-offset: 2px;
+}
+
+/* Scrollbar styling for webkit browsers */
+::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	background: var(--border-color);
+	border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: var(--text-tertiary);
+}
+
+/* App layout */
+#app {
+	display: flex;
+	height: 100vh;
+	overflow: hidden;
+}
