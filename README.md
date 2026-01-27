@@ -11,6 +11,12 @@ A macOS GUI application for [anylinuxfs](https://github.com/nohajc/anylinuxfs) -
 - VM configuration (RAM, vCPUs, log level)
 - Native macOS look and feel (light/dark mode)
 
+## Screenshots
+
+<img width="1089" height="906" alt="image" src="https://github.com/user-attachments/assets/a50c98fe-bf7e-414c-9ef0-016bcf1101bb" />
+<img width="1089" height="906" alt="image" src="https://github.com/user-attachments/assets/036ef98d-5b44-45a4-baff-40bb41532878" />
+
+
 ## Requirements
 
 - macOS (Apple Silicon)
