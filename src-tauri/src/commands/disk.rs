@@ -262,6 +262,7 @@ fn is_linux_native_fs(fs: &str) -> bool {
         || fs_lower.contains("btrfs") || fs_lower.contains("xfs") || fs_lower.contains("f2fs")
         || fs_lower.contains("reiserfs") || fs_lower.contains("zfs")
         || fs_lower.contains("ntfs") || fs_lower.contains("exfat")
+        || fs_lower == "linux filesystem"
 }
 
 fn get_diskutil_fs_info(device_id: &str) -> Option<(String, bool, Option<String>)> {
@@ -296,6 +297,11 @@ fn check_filesystem_support(fs: &str) -> (bool, Option<String>) {
         || fs_lower.contains("reiserfs")
     {
         return (true, None);
+    }
+
+    // Generic "Linux Filesystem" from GPT partition type (native anylinuxfs detection)
+    if fs_lower == "linux filesystem" {
+        return (true, Some("Linux partition (use admin mode for exact fs type)".to_string()));
     }
 
     // FAT filesystems - well supported

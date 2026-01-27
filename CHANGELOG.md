@@ -5,9 +5,10 @@ All notable changes to this project will be documented in this file.
 ## [0.1.7] - 2025-01-27
 
 ### Fixed
-- Disk detection now merges native and macOS fallback results
+- Disk detection now merges native and MS fallback results
 - Linux-only cards now properly detected (not filtered by -m flag)
-- Cards with broken GUID tables still work via macOS fallback
+- Cards with broken GUID tables still work via MS fallback
+- "Linux Filesystem" partition type now recognized as supported
 
 ## [0.1.6] - 2025-01-27
 
