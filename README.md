@@ -21,6 +21,14 @@ A macOS GUI application for [anylinuxfs](https://github.com/containers/anylinuxf
 
 ## Installation
 
+### Homebrew (recommended)
+
+```bash
+brew install fenio/tap/anylinuxfs-gui
+```
+
+### Manual
+
 Download the latest DMG from [Releases](../../releases), open it, and drag the app to Applications.
 
 On first launch, right-click the app and select "Open" to bypass Gatekeeper (the app is not notarized).
