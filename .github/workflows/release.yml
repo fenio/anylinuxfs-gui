@@ -34,6 +34,11 @@ jobs:
       - name: Build Tauri app
         run: npm run tauri:build
 
+      - name: Ad-hoc sign the app
+        run: |
+          codesign --force --deep --sign - "src-tauri/target/release/bundle/macos/anylinuxfs-gui.app"
+          codesign --verify --verbose "src-tauri/target/release/bundle/macos/anylinuxfs-gui.app"
+
       - name: Get version from tag
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
