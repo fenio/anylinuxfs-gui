@@ -5,6 +5,7 @@ pub mod config;
 pub mod shell;
 pub mod image;
 pub mod apk;
+pub mod action;
 
 pub use disk::*;
 pub use status::*;
@@ -13,3 +14,4 @@ pub use config::*;
 pub use shell::{start_shell, write_shell, resize_shell, stop_shell, PtyState};
 pub use image::*;
 pub use apk::*;
+pub use action::*;

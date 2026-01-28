@@ -6,6 +6,7 @@
 		{ path: '/shell', label: 'Shell', icon: 'shell' },
 		{ path: '/images', label: 'Images', icon: 'image' },
 		{ path: '/packages', label: 'Packages', icon: 'package' },
+		{ path: '/actions', label: 'Actions', icon: 'action' },
 		{ path: '/logs', label: 'Logs', icon: 'log' },
 		{ path: '/settings', label: 'Settings', icon: 'settings' }
 	];
@@ -142,5 +143,9 @@
 
 	.nav-icon[data-icon='package']::before {
 		content: '\1F4E6';
+	}
+
+	.nav-icon[data-icon='action']::before {
+		content: '\26A1';
 	}
 </style>

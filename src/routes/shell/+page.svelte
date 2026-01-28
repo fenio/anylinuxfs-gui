@@ -89,11 +89,8 @@
 			terminal?.writeln('\r\n\x1b[33m[Shell exited. Click "Start Shell" to reconnect.]\x1b[0m');
 		});
 
-		// Check mount status and auto-start if not mounted
+		// Check mount status
 		await checkMountStatus();
-		if (!isMounted) {
-			handleStart();
-		}
 
 		return () => {
 			resizeObserver.disconnect();

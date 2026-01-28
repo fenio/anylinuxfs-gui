@@ -10,6 +10,7 @@ use commands::{
     start_shell, write_shell, resize_shell, stop_shell,
     list_images, install_image, uninstall_image,
     list_packages, add_packages, remove_packages,
+    list_custom_actions, create_custom_action, update_custom_action, delete_custom_action,
     WatcherState, PtyState,
 };
 
@@ -43,6 +44,10 @@ pub fn run() {
             list_packages,
             add_packages,
             remove_packages,
+            list_custom_actions,
+            create_custom_action,
+            update_custom_action,
+            delete_custom_action,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
