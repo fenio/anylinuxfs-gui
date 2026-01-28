@@ -2,13 +2,15 @@
 	import { status, isMounted } from '$lib/stores/status';
 	import { disks } from '$lib/stores/disks';
 	import { forceCleanup } from '$lib/api';
+	import { Timeouts } from '$lib/constants';
+	import { logAction, logError } from '$lib/logger';
 	import { onMount, onDestroy } from 'svelte';
 
 	let unmounting = $state(false);
 	let cleaning = $state(false);
 
 	onMount(() => {
-		status.startPolling(2000);
+		status.startPolling();
 	});
 
 	onDestroy(() => {
@@ -20,18 +22,20 @@
 		status.stopPolling();
 		await disks.unmount();
 		// Wait for VM cleanup before checking status
-		await new Promise((r) => setTimeout(r, 1000));
+		await new Promise((r) => setTimeout(r, Timeouts.LOG_POLL_INTERVAL));
 		unmounting = false;
 		status.refresh();
-		status.startPolling(2000);
+		status.startPolling();
 	}
 
 	async function handleForceCleanup() {
 		cleaning = true;
 		try {
+			logAction('Force cleanup started');
 			await forceCleanup();
+			logAction('Force cleanup completed');
 		} catch (e) {
-			console.error('Force cleanup failed:', e);
+			logError('forceCleanup', e);
 		}
 		cleaning = false;
 		status.refresh();
@@ -132,13 +136,13 @@
 	}
 
 	.mount-status.orphaned {
-		background: #fef3c7;
-		border: 1px solid #f59e0b;
+		background: var(--warning-bg-solid);
+		border: 1px solid var(--warning-border);
 	}
 
 	.mount-status.mounting {
-		background: #eff6ff;
-		border: 1px solid #3b82f6;
+		background: var(--info-bg);
+		border: 1px solid var(--info-border);
 	}
 
 	.status-icon {
@@ -159,7 +163,7 @@
 	.icon-warning::before {
 		content: '\26A0';
 		font-size: 18px;
-		color: #b45309;
+		color: var(--warning-border);
 	}
 
 	.status-info {
@@ -215,7 +219,7 @@
 		padding: 6px 14px;
 		border-radius: 6px;
 		border: none;
-		background: #b45309;
+		background: var(--warning-border);
 		color: white;
 		font-size: 13px;
 		cursor: pointer;
@@ -223,7 +227,7 @@
 	}
 
 	.cleanup-btn:hover:not(:disabled) {
-		background: #92400e;
+		background: var(--warning-text);
 	}
 
 	.cleanup-btn:disabled {
@@ -234,8 +238,8 @@
 	.spinner {
 		width: 20px;
 		height: 20px;
-		border: 2px solid #93c5fd;
-		border-top-color: #3b82f6;
+		border: 2px solid var(--spinner-border);
+		border-top-color: var(--spinner-border-top);
 		border-radius: 50%;
 		animation: spin 0.8s linear infinite;
 	}

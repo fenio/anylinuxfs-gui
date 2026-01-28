@@ -1,6 +1,8 @@
 import { writable, derived } from 'svelte/store';
 import type { MountInfo } from '../types';
 import { getMountStatus } from '../api';
+import { Timeouts } from '../constants';
+import { logError } from '../logger';
 
 interface StatusState {
 	info: MountInfo;
@@ -36,10 +38,11 @@ function createStatusStore() {
 				const info = await getMountStatus();
 				update((s) => ({ ...s, info, loading: false, error: null }));
 			} catch (e) {
+				logError('status.refresh', e);
 				update((s) => ({ ...s, error: String(e), loading: false }));
 			}
 		},
-		startPolling(intervalMs: number = 2000) {
+		startPolling(intervalMs: number = Timeouts.STATUS_POLL_INTERVAL) {
 			this.stopPolling();
 			this.refresh();
 			pollInterval = setInterval(() => this.refresh(), intervalMs);

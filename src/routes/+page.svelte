@@ -71,10 +71,10 @@
 		gap: 12px;
 		padding: 16px;
 		margin-bottom: 16px;
-		background: #fef3c7;
-		border: 1px solid #f59e0b;
+		background: var(--warning-bg-solid);
+		border: 1px solid var(--warning-border);
 		border-radius: 8px;
-		color: #92400e;
+		color: var(--warning-text);
 	}
 
 	.warning-icon {
@@ -104,13 +104,13 @@
 	}
 
 	.init-warning {
-		background: #eff6ff;
-		border-color: #3b82f6;
-		color: #1e40af;
+		background: var(--info-bg);
+		border-color: var(--info-border);
+		color: var(--info-text);
 	}
 
 	.init-warning .warning-icon {
-		background: #3b82f6;
+		background: var(--info-color);
 		color: white;
 		width: 24px;
 		height: 24px;

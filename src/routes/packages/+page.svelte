@@ -288,7 +288,7 @@
 	}
 
 	.btn-remove:hover:not(:disabled) {
-		background: #dc2626;
+		background: var(--danger-color);
 		color: white;
 	}
 

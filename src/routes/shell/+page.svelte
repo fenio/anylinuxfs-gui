@@ -4,6 +4,8 @@
 	import { FitAddon } from '@xterm/addon-fit';
 	import { listen } from '@tauri-apps/api/event';
 	import { startShell, writeShell, resizeShell, stopShell, getMountStatus } from '$lib/api';
+	import { Events } from '$lib/constants';
+	import { logAction, logError } from '$lib/logger';
 	import '@xterm/xterm/css/xterm.css';
 
 	let terminalEl: HTMLDivElement;
@@ -79,13 +81,14 @@
 		resizeObserver.observe(terminalEl);
 
 		// Listen for shell output
-		unlistenOutput = await listen<string>('shell-output', (event) => {
+		unlistenOutput = await listen<string>(Events.SHELL_OUTPUT, (event) => {
 			terminal?.write(event.payload);
 		});
 
 		// Listen for shell exit
-		unlistenExit = await listen('shell-exit', () => {
+		unlistenExit = await listen(Events.SHELL_EXIT, () => {
 			running = false;
+			logAction('Shell exited');
 			terminal?.writeln('\r\n\x1b[33m[Shell exited. Click "Start Shell" to reconnect.]\x1b[0m');
 		});
 
@@ -122,13 +125,16 @@
 		terminal?.writeln(`Starting ${selectedImage} shell...\r\n`);
 
 		try {
+			logAction('Shell starting', { image: selectedImage });
 			await startShell(selectedImage);
 			running = true;
+			logAction('Shell started', { image: selectedImage });
 			// Send initial resize
 			if (terminal) {
 				await resizeShell(terminal.rows, terminal.cols);
 			}
 		} catch (e) {
+			logError('shell.start', e);
 			error = String(e);
 			terminal?.writeln(`\x1b[31mError: ${error}\x1b[0m\r\n`);
 		}
@@ -138,11 +144,13 @@
 		if (!running) return;
 
 		try {
+			logAction('Shell stopping');
 			await stopShell();
 			running = false;
+			logAction('Shell stopped');
 			terminal?.writeln('\r\n\x1b[33m[Shell stopped.]\x1b[0m');
 		} catch (e) {
-			console.error('Stop error:', e);
+			logError('shell.stop', e);
 		}
 	}
 </script>
@@ -225,19 +233,19 @@
 	}
 
 	.status-badge.warning {
-		background: #fef3c7;
-		border-color: #f59e0b;
-		color: #92400e;
+		background: var(--warning-bg-solid);
+		border-color: var(--warning-border);
+		color: var(--warning-text);
 	}
 
 	.warning-banner {
 		display: flex;
 		align-items: center;
 		padding: 10px 14px;
-		background: #fef3c7;
-		border: 1px solid #f59e0b;
+		background: var(--warning-bg-solid);
+		border: 1px solid var(--warning-border);
 		border-radius: 6px;
-		color: #92400e;
+		color: var(--warning-text);
 		font-size: 13px;
 		margin-bottom: 16px;
 	}

@@ -126,8 +126,8 @@
 		font-size: 10px;
 		padding: 2px 6px;
 		border-radius: 4px;
-		background: #fef3c7;
-		color: #b45309;
+		background: var(--warning-bg-solid);
+		color: var(--warning-border);
 		font-weight: 500;
 	}
 

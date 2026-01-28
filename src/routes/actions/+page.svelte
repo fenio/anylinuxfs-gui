@@ -505,8 +505,8 @@
 	}
 
 	.upstream-badge {
-		background: #e5e7eb;
-		color: #4b5563;
+		background: var(--disabled-bg);
+		color: var(--disabled-text);
 	}
 
 	.user-badge {
@@ -580,12 +580,12 @@
 
 	.btn-danger {
 		border: none;
-		background: #dc2626;
+		background: var(--danger-color);
 		color: white;
 	}
 
 	.btn-danger:hover:not(:disabled) {
-		background: #b91c1c;
+		background: var(--danger-hover);
 	}
 
 	.btn-primary:disabled,
@@ -694,7 +694,7 @@
 	}
 
 	.required {
-		color: #dc2626;
+		color: var(--danger-color);
 		font-weight: 600;
 	}
 

@@ -1,6 +1,8 @@
 import { writable, derived } from 'svelte/store';
 import type { Disk, DiskListResult } from '../types';
 import { listDisks, mountDisk, unmountDisk } from '../api';
+import { Timeouts, validateDevicePath } from '../constants';
+import { logAction, logError } from '../logger';
 
 interface DisksState {
 	disks: Disk[];
@@ -51,13 +53,24 @@ function createDisksStore() {
 			update((s) => ({ ...s, adminMode: enabled }));
 		},
 		async mount(device: string, passphrase?: string) {
+			// Validate device path
+			const validationError = validateDevicePath(device);
+			if (validationError) {
+				logError('mount', new Error(validationError));
+				update((s) => ({ ...s, error: validationError }));
+				return false;
+			}
+
 			const mountId = Date.now();
+			logAction('Mount started', { device });
 			update((s) => ({ ...s, mountingDevice: device, error: null, recentUnmount: false, currentMountId: mountId }));
 			try {
 				await mountDisk(device, passphrase);
+				logAction('Mount completed', { device });
 				update((s) => ({ ...s, mountingDevice: null }));
 				return true;
 			} catch (e) {
+				logError('mount', e);
 				// Don't show error if:
 				// - Unmount was requested while mounting
 				// - Mount was already detected as successful (mountingDevice was cleared)
@@ -73,22 +86,25 @@ function createDisksStore() {
 		async unmount() {
 			// Set recentUnmount to suppress stale mount errors and orphan warnings
 			if (unmountTimeout) clearTimeout(unmountTimeout);
+			logAction('Unmount started');
 			update((s) => ({ ...s, mountingDevice: 'unmounting', error: null, recentUnmount: true }));
 			try {
 				await unmountDisk();
 				// Small delay to let socket file clean up
-				await new Promise((r) => setTimeout(r, 500));
+				await new Promise((r) => setTimeout(r, Timeouts.UNMOUNT_CLEANUP_DELAY));
+				logAction('Unmount completed');
 				update((s) => ({ ...s, mountingDevice: null }));
-				// Clear recentUnmount after 3 seconds
+				// Clear recentUnmount after timeout
 				unmountTimeout = setTimeout(() => {
 					update((s) => ({ ...s, recentUnmount: false }));
-				}, 3000);
+				}, Timeouts.RECENT_UNMOUNT_CLEAR);
 				return true;
 			} catch (e) {
+				logError('unmount', e);
 				update((s) => ({ ...s, error: String(e), mountingDevice: null }));
 				unmountTimeout = setTimeout(() => {
 					update((s) => ({ ...s, recentUnmount: false }));
-				}, 3000);
+				}, Timeouts.RECENT_UNMOUNT_CLEAR);
 				return false;
 			}
 		},

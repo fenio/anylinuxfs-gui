@@ -1,6 +1,8 @@
 import { writable } from 'svelte/store';
 import { listen } from '@tauri-apps/api/event';
 import { getLogContent, startLogStream } from '../api';
+import { Events, Limits } from '../constants';
+import { logError } from '../logger';
 
 interface LogsState {
 	lines: string[];
@@ -8,8 +10,6 @@ interface LogsState {
 	error: string | null;
 	following: boolean;
 }
-
-const MAX_LINES = 1000;
 
 function createLogsStore() {
 	const { subscribe, set, update } = writable<LogsState>({
@@ -26,9 +26,10 @@ function createLogsStore() {
 		async load() {
 			update((s) => ({ ...s, loading: true, error: null }));
 			try {
-				const lines = await getLogContent(500);
+				const lines = await getLogContent(Limits.DEFAULT_LOG_LINES);
 				update((s) => ({ ...s, lines, loading: false }));
 			} catch (e) {
+				logError('logs.load', e);
 				update((s) => ({ ...s, error: String(e), loading: false }));
 			}
 		},
@@ -38,17 +39,18 @@ function createLogsStore() {
 				await startLogStream();
 
 				// Listen for log events
-				unlisten = await listen<string>('log-line', (event) => {
+				unlisten = await listen<string>(Events.LOG_LINE, (event) => {
 					update((s) => {
 						const newLines = [...s.lines, event.payload];
 						// Keep only last MAX_LINES
-						if (newLines.length > MAX_LINES) {
-							newLines.splice(0, newLines.length - MAX_LINES);
+						if (newLines.length > Limits.MAX_LOG_LINES) {
+							newLines.splice(0, newLines.length - Limits.MAX_LOG_LINES);
 						}
 						return { ...s, lines: newLines };
 					});
 				});
 			} catch (e) {
+				logError('logs.startStreaming', e);
 				update((s) => ({ ...s, error: String(e) }));
 			}
 		},

@@ -6,6 +6,8 @@
 	import { onMount } from 'svelte';
 	import { listen } from '@tauri-apps/api/event';
 	import { startDiskWatcher, ejectDisk } from '$lib/api';
+	import { Events } from '$lib/constants';
+	import { logAction, logError } from '$lib/logger';
 
 	let ejectingDevice: string | null = $state(null);
 
@@ -15,10 +17,10 @@
 		disks.refresh();
 
 		// Start watching for disk changes
-		startDiskWatcher().catch(console.error);
+		startDiskWatcher().catch((e) => logError('startDiskWatcher', e));
 
 		// Listen for disk change events and auto-refresh
-		const unlisten = listen('disks-changed', () => {
+		const unlisten = listen(Events.DISKS_CHANGED, () => {
 			disks.refresh();
 		});
 
@@ -65,11 +67,13 @@
 	async function handleEject(device: string) {
 		ejectingDevice = device;
 		try {
+			logAction('Ejecting disk', { device });
 			await ejectDisk(device);
+			logAction('Disk ejected', { device });
 			// Refresh after successful eject
 			disks.refresh();
 		} catch (e) {
-			console.error('Failed to eject:', e);
+			logError('eject', e);
 		} finally {
 			ejectingDevice = null;
 		}
@@ -279,8 +283,8 @@
 		align-items: center;
 		gap: 10px;
 		padding: 12px 16px;
-		background: #eff6ff;
-		border: 1px solid #3b82f6;
+		background: var(--info-bg);
+		border: 1px solid var(--info-border);
 		border-radius: 8px;
 		margin-bottom: 16px;
 	}
@@ -291,7 +295,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: #3b82f6;
+		background: var(--info-color);
 		color: white;
 		border-radius: 50%;
 		font-size: 12px;
@@ -302,11 +306,11 @@
 	.hint-text {
 		flex: 1;
 		font-size: 13px;
-		color: #1e40af;
+		color: var(--info-text);
 	}
 
 	.hint-text strong {
-		color: #1e3a8a;
+		color: var(--info-text-dark);
 	}
 
 	.loading,
