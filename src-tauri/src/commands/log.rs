@@ -7,6 +7,7 @@ use std::sync::mpsc::channel;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
+use crate::paths::get_log_path;
 
 /// State to track and control watcher threads
 pub struct WatcherState {
@@ -24,14 +25,6 @@ impl Default for WatcherState {
             disk_watcher_running: AtomicBool::new(false),
             disk_watcher_stop: AtomicBool::new(false),
         }
-    }
-}
-
-fn get_log_path() -> PathBuf {
-    if let Some(home) = dirs::home_dir() {
-        home.join("Library/Logs/anylinuxfs.log")
-    } else {
-        PathBuf::from("/tmp/anylinuxfs.log")
     }
 }
 

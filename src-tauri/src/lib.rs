@@ -1,5 +1,11 @@
+mod cache;
 mod cli;
 mod commands;
+mod error;
+mod paths;
+
+pub use error::{AppError, AppResult};
+pub use paths::{get_socket_path, get_log_path, COMMAND_TIMEOUT_SECS, MOUNT_TIMEOUT_SECS};
 
 use std::sync::{Arc, Mutex};
 use tauri_plugin_log::{Target, TargetKind};

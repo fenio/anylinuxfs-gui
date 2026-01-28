@@ -3,7 +3,10 @@ use std::process::Command;
 use std::thread;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
+use tokio::time::timeout;
+use crate::cache;
 use crate::cli::execute_command;
+use crate::paths::{get_socket_path, COMMAND_TIMEOUT_SECS, MOUNT_TIMEOUT_SECS};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Partition {
@@ -36,8 +39,8 @@ pub struct DiskListResult {
 
 #[tauri::command]
 pub async fn list_disks(use_sudo: bool) -> Result<DiskListResult, String> {
-    // Run in blocking task to avoid freezing UI
-    tokio::task::spawn_blocking(move || {
+    // Run in blocking task with timeout to avoid freezing UI
+    let list_future = tokio::task::spawn_blocking(move || {
         // Run both list commands and merge results:
         // - `list` (native): correctly detects Linux filesystems on Linux-only cards
         // - `list -m` (Microsoft fallback): works with broken GUID tables
@@ -68,9 +71,12 @@ pub async fn list_disks(use_sudo: bool) -> Result<DiskListResult, String> {
         result.used_admin_mode = use_sudo;
 
         Ok(result)
-    })
-    .await
-    .map_err(|e| format!("Task error: {}", e))?
+    });
+
+    timeout(Duration::from_secs(COMMAND_TIMEOUT_SECS), list_future)
+        .await
+        .map_err(|_| format!("List disks timed out after {} seconds", COMMAND_TIMEOUT_SECS))?
+        .map_err(|e| format!("Task error: {}", e))?
 }
 
 fn merge_disk_results(
@@ -170,7 +176,8 @@ fn update_mount_status(result: &mut DiskListResult) {
 fn get_system_mounts() -> Vec<(String, String)> {
     let mut mounts = Vec::new();
 
-    if let Ok(output) = Command::new("mount").output() {
+    // Use cached mount output to avoid redundant process spawning
+    if let Some(output) = cache::get_mount_output() {
         let mount_output = String::from_utf8_lossy(&output.stdout);
 
         for line in mount_output.lines() {
@@ -505,17 +512,22 @@ fn parse_type_and_name(parts: &[&str]) -> (String, Option<String>) {
 
 #[tauri::command]
 pub async fn mount_disk(app: AppHandle, device: String, passphrase: Option<String>) -> Result<String, String> {
-    // Run in blocking task to avoid freezing UI during sudo prompt
-    let result = tokio::task::spawn_blocking(move || {
+    // Run in blocking task with timeout to avoid freezing UI
+    let mount_future = tokio::task::spawn_blocking(move || {
         let pass_ref = passphrase.as_deref();
         let result = execute_command(&["mount", &device], true, pass_ref);
 
-        // Give a moment for mount to complete, then verify with retries
-        // 20 retries × 500ms = 10 seconds total timeout
-        for _ in 0..20 {
-            thread::sleep(Duration::from_millis(500));
+        // Check immediately first, then retry with short intervals
+        // 40 retries × 250ms = 10 seconds total timeout
+        for i in 0..40 {
+            // Invalidate cache to get fresh mount data
+            cache::invalidate_mount_cache();
             if check_nfs_mount_exists() {
                 return Ok(result.unwrap_or_else(|_| "Mounted successfully".to_string()));
+            }
+            // Don't sleep on first iteration - check immediately
+            if i > 0 {
+                thread::sleep(Duration::from_millis(250));
             }
         }
 
@@ -531,9 +543,13 @@ pub async fn mount_disk(app: AppHandle, device: String, passphrase: Option<Strin
             }
             Err(e) => Err(e),
         }
-    })
-    .await
-    .map_err(|e| format!("Task error: {}", e))?;
+    });
+
+    // Apply overall timeout
+    let result = timeout(Duration::from_secs(MOUNT_TIMEOUT_SECS), mount_future)
+        .await
+        .map_err(|_| format!("Mount operation timed out after {} seconds", MOUNT_TIMEOUT_SECS))?
+        .map_err(|e| format!("Task error: {}", e))?;
 
     // Emit status changed event regardless of success/failure
     let _ = app.emit("status-changed", ());
@@ -542,7 +558,8 @@ pub async fn mount_disk(app: AppHandle, device: String, passphrase: Option<Strin
 }
 
 fn check_nfs_mount_exists() -> bool {
-    if let Ok(output) = Command::new("mount").output() {
+    // Use cached mount output to avoid redundant process spawning
+    if let Some(output) = cache::get_mount_output() {
         let mount_output = String::from_utf8_lossy(&output.stdout);
         // Look for anylinuxfs NFS mount pattern
         mount_output.contains("localhost:/mnt/") && mount_output.contains("/Volumes/")
@@ -553,12 +570,27 @@ fn check_nfs_mount_exists() -> bool {
 
 #[tauri::command]
 pub async fn unmount_disk(app: AppHandle) -> Result<String, String> {
-    // Run in blocking task - unmount doesn't need sudo
-    let result = tokio::task::spawn_blocking(|| {
+    // Run in blocking task with timeout
+    let unmount_future = tokio::task::spawn_blocking(|| {
         execute_command(&["unmount"], false, None)
-    })
-    .await
-    .map_err(|e| format!("Task error: {}", e))?;
+    });
+
+    let result = timeout(Duration::from_secs(COMMAND_TIMEOUT_SECS), unmount_future)
+        .await
+        .map_err(|_| format!("Unmount timed out after {} seconds", COMMAND_TIMEOUT_SECS))?
+        .map_err(|e| format!("Task error: {}", e))?;
+
+    // Wait for VM to fully shut down by polling until krun process is gone
+    // 40 retries × 250ms = 10 seconds max wait
+    for _ in 0..40 {
+        if !is_vm_running() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+
+    // Invalidate all caches after unmount
+    cache::invalidate_all();
 
     // Emit status changed event
     let _ = app.emit("status-changed", ());
@@ -566,11 +598,18 @@ pub async fn unmount_disk(app: AppHandle) -> Result<String, String> {
     result
 }
 
+/// Check if the VM (krun) process is running
+fn is_vm_running() -> bool {
+    // Use cached pgrep result, but invalidate first since we're polling for shutdown
+    cache::invalidate_process_cache();
+    cache::is_krun_running()
+}
+
 #[tauri::command]
 pub async fn eject_disk(device: String) -> Result<String, String> {
     // Eject (power down) a disk using diskutil
     // First unmount anylinuxfs if it has anything mounted, then eject
-    tokio::task::spawn_blocking(move || {
+    let eject_future = tokio::task::spawn_blocking(move || {
         // Check if anylinuxfs has anything mounted and unmount first
         if check_nfs_mount_exists() {
             // Unmount anylinuxfs first - this shuts down the VM properly
@@ -579,10 +618,14 @@ pub async fn eject_disk(device: String) -> Result<String, String> {
             // Wait for anylinuxfs to fully stop (up to 5 seconds)
             for _ in 0..10 {
                 thread::sleep(Duration::from_millis(500));
+                // Invalidate cache to get fresh mount data
+                cache::invalidate_mount_cache();
                 if !check_nfs_mount_exists() {
                     break;
                 }
             }
+            // Invalidate all caches after unmount
+            cache::invalidate_all();
         }
 
         // Now safe to eject the disk
@@ -597,9 +640,12 @@ pub async fn eject_disk(device: String) -> Result<String, String> {
             let stderr = String::from_utf8_lossy(&output.stderr);
             Err(format!("Failed to eject: {}", stderr))
         }
-    })
-    .await
-    .map_err(|e| format!("Task error: {}", e))?
+    });
+
+    timeout(Duration::from_secs(COMMAND_TIMEOUT_SECS), eject_future)
+        .await
+        .map_err(|_| format!("Eject timed out after {} seconds", COMMAND_TIMEOUT_SECS))?
+        .map_err(|e| format!("Task error: {}", e))?
 }
 
 #[tauri::command]
@@ -623,9 +669,9 @@ pub async fn force_cleanup() -> Result<String, String> {
         }
 
         // Remove socket file if it exists
-        let socket_path = "/tmp/anylinuxfs.sock";
-        if std::path::Path::new(socket_path).exists() {
-            if std::fs::remove_file(socket_path).is_ok() {
+        let socket_path = get_socket_path();
+        if socket_path.exists() {
+            if std::fs::remove_file(&socket_path).is_ok() {
                 killed.push("socket");
             }
         }

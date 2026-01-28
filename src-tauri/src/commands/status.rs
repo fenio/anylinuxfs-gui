@@ -1,11 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
-use std::process::Command;
 use std::time::Duration;
+use crate::cache;
 use crate::cli;
-
-const SOCKET_PATH: &str = "/tmp/anylinuxfs.sock";
+use crate::paths::get_socket_path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CliStatus {
@@ -92,7 +91,8 @@ fn get_mount_status_sync() -> Result<MountInfo, String> {
 }
 
 fn try_socket_status() -> Option<MountInfo> {
-    let stream = UnixStream::connect(SOCKET_PATH).ok()?;
+    let socket_path = get_socket_path();
+    let stream = UnixStream::connect(socket_path).ok()?;
     stream.set_read_timeout(Some(Duration::from_secs(2))).ok();
     stream.set_write_timeout(Some(Duration::from_secs(2))).ok();
 
@@ -133,31 +133,14 @@ fn try_socket_status() -> Option<MountInfo> {
 fn check_orphaned_instance() -> bool {
     // Only check for actual running processes, not stale socket files
     // The socket file can be left over from previous sessions
-
-    // Check for krun process (the VM runtime) - use exact match to avoid false positives
-    if let Ok(output) = Command::new("pgrep").args(["-x", "krun"]).output() {
-        if output.status.success() && !output.stdout.is_empty() {
-            return true;
-        }
-    }
-
-    // Also check for libkrun processes
-    if let Ok(output) = Command::new("pgrep").args(["-f", "libkrun"]).output() {
-        if output.status.success() && !output.stdout.is_empty() {
-            return true;
-        }
-    }
-
-    false
+    // Uses cached pgrep results to avoid redundant process spawning
+    cache::is_vm_running_cached()
 }
 
 fn check_mount_point_fallback() -> Option<MountInfo> {
     // Check for localhost NFS mounts (anylinuxfs signature)
-    // Run: mount | grep "localhost:/mnt"
-    let output = Command::new("mount")
-        .output()
-        .ok()?;
-
+    // Uses cached mount output to avoid redundant process spawning
+    let output = cache::get_mount_output()?;
     let mount_output = String::from_utf8_lossy(&output.stdout);
 
     // Look for anylinuxfs NFS mount pattern: localhost:/mnt/XXX on /Volumes/XXX

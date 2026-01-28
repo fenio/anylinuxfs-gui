@@ -25,6 +25,9 @@ const defaultInfo: MountInfo = {
 // Longer polling interval since we now have push events
 const FALLBACK_POLL_INTERVAL = 10000; // 10 seconds
 
+// Debounce window to merge rapid refresh calls
+const DEBOUNCE_MS = 500;
+
 function createStatusStore() {
 	const { subscribe, set, update } = writable<StatusState>({
 		info: defaultInfo,
@@ -34,25 +37,50 @@ function createStatusStore() {
 
 	let pollInterval: ReturnType<typeof setInterval> | null = null;
 	let unlisten: (() => void) | null = null;
+	let debounceTimeout: ReturnType<typeof setTimeout> | null = null;
+	let refreshInProgress = false;
+
+	async function doRefresh() {
+		if (refreshInProgress) return;
+		refreshInProgress = true;
+		update((s) => ({ ...s, loading: true }));
+		try {
+			const info = await getMountStatus();
+			update((s) => ({ ...s, info, loading: false, error: null }));
+		} catch (e) {
+			logError('status.refresh', e);
+			update((s) => ({ ...s, error: String(e), loading: false }));
+		} finally {
+			refreshInProgress = false;
+		}
+	}
 
 	return {
 		subscribe,
-		async refresh() {
-			update((s) => ({ ...s, loading: true }));
-			try {
-				const info = await getMountStatus();
-				update((s) => ({ ...s, info, loading: false, error: null }));
-			} catch (e) {
-				logError('status.refresh', e);
-				update((s) => ({ ...s, error: String(e), loading: false }));
+		refresh() {
+			// Debounce: cancel pending refresh and schedule new one
+			if (debounceTimeout) {
+				clearTimeout(debounceTimeout);
 			}
+			debounceTimeout = setTimeout(() => {
+				debounceTimeout = null;
+				doRefresh();
+			}, DEBOUNCE_MS);
+		},
+		// Immediate refresh bypassing debounce (for initial load)
+		refreshNow() {
+			if (debounceTimeout) {
+				clearTimeout(debounceTimeout);
+				debounceTimeout = null;
+			}
+			doRefresh();
 		},
 		async startListening() {
 			// Stop any existing listeners
 			this.stopListening();
 
-			// Initial refresh
-			this.refresh();
+			// Initial refresh (immediate, no debounce)
+			this.refreshNow();
 
 			// Listen for status change events (push updates)
 			try {

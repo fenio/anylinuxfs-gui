@@ -1,4 +1,4 @@
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import type { Disk, DiskListResult } from '../types';
 import { listDisks, mountDisk, unmountDisk } from '../api';
 import { Timeouts, validateDevicePath } from '../constants';
@@ -16,6 +16,9 @@ interface DisksState {
 }
 
 function createDisksStore() {
+	// Track adminMode locally to avoid subscribe/unsubscribe overhead
+	let currentAdminMode = false;
+
 	const { subscribe, set, update } = writable<DisksState>({
 		disks: [],
 		loading: false,
@@ -34,11 +37,8 @@ function createDisksStore() {
 		async refresh(useSudo?: boolean) {
 			update((s) => ({ ...s, loading: true, error: null }));
 			try {
-				// Use provided value or fall back to current adminMode
-				let adminMode: boolean;
-				const unsubscribe = subscribe((s) => (adminMode = useSudo ?? s.adminMode));
-				unsubscribe();
-				const result = await listDisks(adminMode!);
+				const adminMode = useSudo ?? currentAdminMode;
+				const result = await listDisks(adminMode);
 				update((s) => ({
 					...s,
 					disks: result.disks,
@@ -50,6 +50,7 @@ function createDisksStore() {
 			}
 		},
 		setAdminMode(enabled: boolean) {
+			currentAdminMode = enabled;
 			update((s) => ({ ...s, adminMode: enabled }));
 		},
 		async mount(device: string, passphrase?: string) {

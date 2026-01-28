@@ -131,7 +131,7 @@
 			<p class="hint">Connect a drive with a Linux filesystem to get started.</p>
 		</div>
 	{:else}
-		{#each $disks.disks as disk}
+		{#each $disks.disks as disk (disk.device)}
 			<div class="disk-group">
 				<div class="disk-header">
 					<span class="disk-device">{disk.device}</span>
@@ -155,7 +155,7 @@
 					{/if}
 				</div>
 				<div class="partitions">
-					{#each disk.partitions as partition}
+					{#each disk.partitions as partition (partition.device)}
 						<DiskCard {partition} onRequestPassphrase={handleRequestPassphrase} />
 					{/each}
 				</div>
