@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import { onMount } from 'svelte';
+	import { checkCli } from '$lib/api';
 
 	const navItems = [
 		{ path: '/', label: 'Disks', icon: 'disk' },
@@ -11,12 +13,21 @@
 		{ path: '/settings', label: 'Settings', icon: 'settings' }
 	];
 
+	let guiVersion = $state('');
+	let cliVersion = $state<string | null>(null);
+
 	function isActive(path: string, currentPath: string): boolean {
 		if (path === '/') {
 			return currentPath === '/';
 		}
 		return currentPath.startsWith(path);
 	}
+
+	onMount(async () => {
+		const status = await checkCli();
+		guiVersion = status.gui_version;
+		cliVersion = status.cli_version;
+	});
 </script>
 
 <nav class="sidebar">
@@ -39,6 +50,16 @@
 			</li>
 		{/each}
 	</ul>
+
+	<div class="version-info">
+		<span class="version-label">Versions:</span>
+		{#if guiVersion}
+			<span>GUI: {guiVersion}</span>
+		{/if}
+		{#if cliVersion}
+			<span>CLI: {cliVersion}</span>
+		{/if}
+	</div>
 </nav>
 
 <style>
@@ -147,5 +168,22 @@
 
 	.nav-icon[data-icon='action']::before {
 		content: '\26A1';
+	}
+
+	.version-info {
+		margin-top: auto;
+		padding: 10px 16px;
+		border-top: 1px solid var(--border-color);
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		font-size: 10px;
+		color: var(--text-tertiary);
+		-webkit-app-region: no-drag;
+	}
+
+	.version-label {
+		color: var(--text-secondary);
+		margin-bottom: 2px;
 	}
 </style>

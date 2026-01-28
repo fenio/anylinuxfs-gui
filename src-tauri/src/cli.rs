@@ -60,6 +60,28 @@ pub fn is_available() -> bool {
     get_anylinuxfs_path().is_some()
 }
 
+/// Get the version of the anylinuxfs CLI
+pub fn get_version() -> Option<String> {
+    let cli_path = get_anylinuxfs_path()?;
+
+    let output = Command::new(cli_path)
+        .arg("--version")
+        .output()
+        .ok()?;
+
+    if output.status.success() {
+        let version_str = String::from_utf8_lossy(&output.stdout);
+        // Parse "anylinuxfs 0.10.2" -> "0.10.2"
+        version_str
+            .trim()
+            .strip_prefix("anylinuxfs ")
+            .map(|v| v.to_string())
+            .or_else(|| Some(version_str.trim().to_string()))
+    } else {
+        None
+    }
+}
+
 /// Get the path to the anylinuxfs CLI
 pub fn get_path() -> Option<&'static Path> {
     get_anylinuxfs_path().map(|p| p.as_path())

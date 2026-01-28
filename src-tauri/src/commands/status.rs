@@ -11,6 +11,8 @@ pub struct CliStatus {
     pub available: bool,
     pub path: String,
     pub initialized: bool,
+    pub cli_version: Option<String>,
+    pub gui_version: String,
 }
 
 fn check_vm_initialized() -> bool {
@@ -30,6 +32,8 @@ pub fn check_cli() -> CliStatus {
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|| "not found".to_string()),
         initialized: check_vm_initialized(),
+        cli_version: cli::get_version(),
+        gui_version: env!("CARGO_PKG_VERSION").to_string(),
     }
 }
 
