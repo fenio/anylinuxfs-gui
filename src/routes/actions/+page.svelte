@@ -276,6 +276,9 @@
 						disabled={!!editingAction}
 						placeholder="my-action"
 						required
+						autocomplete="off"
+						autocorrect="off"
+						spellcheck="false"
 					/>
 					{#if editingAction}
 						<span class="field-hint">Name cannot be changed after creation</span>
@@ -289,6 +292,9 @@
 						id="description"
 						bind:value={formDescription}
 						placeholder="Optional description of what this action does"
+						autocomplete="off"
+						autocorrect="off"
+						spellcheck="false"
 					/>
 				</div>
 
@@ -299,6 +305,9 @@
 						bind:value={formBeforeMount}
 						rows="3"
 						placeholder="Commands to run before mounting"
+						autocomplete="off"
+						autocorrect="off"
+						spellcheck="false"
 					></textarea>
 				</div>
 
@@ -309,6 +318,9 @@
 						bind:value={formAfterMount}
 						rows="3"
 						placeholder="Commands to run after mounting"
+						autocomplete="off"
+						autocorrect="off"
+						spellcheck="false"
 					></textarea>
 				</div>
 
@@ -319,6 +331,9 @@
 						bind:value={formBeforeUnmount}
 						rows="3"
 						placeholder="Commands to run before unmounting"
+						autocomplete="off"
+						autocorrect="off"
+						spellcheck="false"
 					></textarea>
 				</div>
 
@@ -329,6 +344,9 @@
 						bind:value={formEnvironment}
 						rows="2"
 						placeholder="KEY=VALUE (one per line)"
+						autocomplete="off"
+						autocorrect="off"
+						spellcheck="false"
 					></textarea>
 					<span class="field-hint">Variables to pass to the mount scripts</span>
 				</div>
@@ -340,6 +358,9 @@
 						bind:value={formCaptureEnvironment}
 						rows="2"
 						placeholder="VARIABLE_NAME (one per line)"
+						autocomplete="off"
+						autocorrect="off"
+						spellcheck="false"
 					></textarea>
 					<span class="field-hint">Host environment variables to capture and pass through</span>
 				</div>
@@ -351,6 +372,9 @@
 						id="override_nfs_export"
 						bind:value={formOverrideNfsExport}
 						placeholder="Custom NFS export path"
+						autocomplete="off"
+						autocorrect="off"
+						spellcheck="false"
 					/>
 				</div>
 

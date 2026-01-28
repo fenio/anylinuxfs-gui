@@ -89,6 +89,9 @@
 			bind:value={newPackage}
 			onkeydown={handleKeydown}
 			disabled={processing}
+			autocomplete="off"
+			autocorrect="off"
+			spellcheck="false"
 		/>
 		<button class="btn-primary" onclick={handleAdd} disabled={processing || !newPackage.trim()}>
 			{processing ? 'Adding...' : 'Add Package'}

@@ -50,6 +50,8 @@
 						bind:value={passphrase}
 						placeholder="Enter encryption passphrase"
 						autocomplete="off"
+						autocorrect="off"
+						spellcheck="false"
 					/>
 					<button
 						type="button"
