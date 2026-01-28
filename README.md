@@ -18,10 +18,12 @@ A macOS GUI application for [anylinuxfs](https://github.com/nohajc/anylinuxfs) -
 
 ## Screenshots
 
-<img width="969" height="890" alt="image" src="https://github.com/user-attachments/assets/e849ea01-1311-4c60-9f73-5e52662d4766" />
-<img width="969" height="890" alt="image" src="https://github.com/user-attachments/assets/64f99b5c-dc1a-4ac4-95b0-d4f8bfc298b6" />
-<img width="969" height="890" alt="image" src="https://github.com/user-attachments/assets/37ffb162-1c93-44f0-b858-b2bf2cb15fbb" />
-<img width="969" height="890" alt="image" src="https://github.com/user-attachments/assets/ae5a5475-4c76-4125-b19c-a628e8fca0c1" />
+<img width="942" height="895" alt="image" src="https://github.com/user-attachments/assets/d667a685-fff8-4826-a58e-e600b3300d1a" />
+<img width="942" height="895" alt="image" src="https://github.com/user-attachments/assets/8d532286-09f3-4b59-af8b-903ed1d3f9e8" />
+<img width="942" height="895" alt="image" src="https://github.com/user-attachments/assets/b09ec0c3-3ae8-4b62-b086-5c5138f01ed0" />
+<img width="942" height="895" alt="image" src="https://github.com/user-attachments/assets/33302d8f-78ff-4ed5-b6fe-b7ebe96b2685" />
+<img width="942" height="895" alt="image" src="https://github.com/user-attachments/assets/f079f0b6-be7a-4052-a386-2de64a6c781f" />
+
 
 ## Requirements
 
