@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
+use tauri::{AppHandle, Emitter};
 use crate::cli::execute_command;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -503,9 +504,9 @@ fn parse_type_and_name(parts: &[&str]) -> (String, Option<String>) {
 }
 
 #[tauri::command]
-pub async fn mount_disk(device: String, passphrase: Option<String>) -> Result<String, String> {
+pub async fn mount_disk(app: AppHandle, device: String, passphrase: Option<String>) -> Result<String, String> {
     // Run in blocking task to avoid freezing UI during sudo prompt
-    tokio::task::spawn_blocking(move || {
+    let result = tokio::task::spawn_blocking(move || {
         let pass_ref = passphrase.as_deref();
         let result = execute_command(&["mount", &device], true, pass_ref);
 
@@ -532,7 +533,12 @@ pub async fn mount_disk(device: String, passphrase: Option<String>) -> Result<St
         }
     })
     .await
-    .map_err(|e| format!("Task error: {}", e))?
+    .map_err(|e| format!("Task error: {}", e))?;
+
+    // Emit status changed event regardless of success/failure
+    let _ = app.emit("status-changed", ());
+
+    result
 }
 
 fn check_nfs_mount_exists() -> bool {
@@ -546,13 +552,18 @@ fn check_nfs_mount_exists() -> bool {
 }
 
 #[tauri::command]
-pub async fn unmount_disk() -> Result<String, String> {
+pub async fn unmount_disk(app: AppHandle) -> Result<String, String> {
     // Run in blocking task - unmount doesn't need sudo
-    tokio::task::spawn_blocking(|| {
+    let result = tokio::task::spawn_blocking(|| {
         execute_command(&["unmount"], false, None)
     })
     .await
-    .map_err(|e| format!("Task error: {}", e))?
+    .map_err(|e| format!("Task error: {}", e))?;
+
+    // Emit status changed event
+    let _ = app.emit("status-changed", ());
+
+    result
 }
 
 #[tauri::command]

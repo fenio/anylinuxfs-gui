@@ -3,7 +3,8 @@ export const Events = {
 	LOG_LINE: 'log-line',
 	SHELL_OUTPUT: 'shell-output',
 	SHELL_EXIT: 'shell-exit',
-	DISKS_CHANGED: 'disks-changed'
+	DISKS_CHANGED: 'disks-changed',
+	STATUS_CHANGED: 'status-changed'
 } as const;
 
 // Timeouts (in milliseconds)

@@ -4,11 +4,27 @@ import { getLogContent, startLogStream } from '../api';
 import { Events, Limits } from '../constants';
 import { logError } from '../logger';
 
+// Pre-computed log line with flags
+export interface LogLine {
+	text: string;
+	isError: boolean;
+	isWarn: boolean;
+}
+
 interface LogsState {
-	lines: string[];
+	lines: LogLine[];
 	loading: boolean;
 	error: string | null;
 	following: boolean;
+}
+
+// Pre-compute error/warn flags for a line
+function processLine(text: string): LogLine {
+	return {
+		text,
+		isError: text.includes('ERROR'),
+		isWarn: text.includes('WARN')
+	};
 }
 
 function createLogsStore() {
@@ -26,7 +42,8 @@ function createLogsStore() {
 		async load() {
 			update((s) => ({ ...s, loading: true, error: null }));
 			try {
-				const lines = await getLogContent(Limits.DEFAULT_LOG_LINES);
+				const rawLines = await getLogContent(Limits.DEFAULT_LOG_LINES);
+				const lines = rawLines.map(processLine);
 				update((s) => ({ ...s, lines, loading: false }));
 			} catch (e) {
 				logError('logs.load', e);
@@ -41,7 +58,8 @@ function createLogsStore() {
 				// Listen for log events
 				unlisten = await listen<string>(Events.LOG_LINE, (event) => {
 					update((s) => {
-						const newLines = [...s.lines, event.payload];
+						const newLine = processLine(event.payload);
+						const newLines = [...s.lines, newLine];
 						// Keep only last MAX_LINES
 						if (newLines.length > Limits.MAX_LOG_LINES) {
 							newLines.splice(0, newLines.length - Limits.MAX_LOG_LINES);

@@ -1,8 +1,9 @@
 import { writable, derived } from 'svelte/store';
+import { listen } from '@tauri-apps/api/event';
 import type { MountInfo } from '../types';
 import { getMountStatus } from '../api';
-import { Timeouts } from '../constants';
-import { logError } from '../logger';
+import { Events, Timeouts } from '../constants';
+import { logError, logAction } from '../logger';
 
 interface StatusState {
 	info: MountInfo;
@@ -21,6 +22,9 @@ const defaultInfo: MountInfo = {
 	orphaned_instance: false
 };
 
+// Longer polling interval since we now have push events
+const FALLBACK_POLL_INTERVAL = 10000; // 10 seconds
+
 function createStatusStore() {
 	const { subscribe, set, update } = writable<StatusState>({
 		info: defaultInfo,
@@ -29,6 +33,7 @@ function createStatusStore() {
 	});
 
 	let pollInterval: ReturnType<typeof setInterval> | null = null;
+	let unlisten: (() => void) | null = null;
 
 	return {
 		subscribe,
@@ -42,16 +47,42 @@ function createStatusStore() {
 				update((s) => ({ ...s, error: String(e), loading: false }));
 			}
 		},
-		startPolling(intervalMs: number = Timeouts.STATUS_POLL_INTERVAL) {
-			this.stopPolling();
+		async startListening() {
+			// Stop any existing listeners
+			this.stopListening();
+
+			// Initial refresh
 			this.refresh();
-			pollInterval = setInterval(() => this.refresh(), intervalMs);
+
+			// Listen for status change events (push updates)
+			try {
+				unlisten = await listen(Events.STATUS_CHANGED, () => {
+					logAction('Status changed event received');
+					this.refresh();
+				});
+			} catch (e) {
+				logError('status.startListening', e);
+			}
+
+			// Fallback polling at longer interval for orphan detection
+			pollInterval = setInterval(() => this.refresh(), FALLBACK_POLL_INTERVAL);
 		},
-		stopPolling() {
+		stopListening() {
+			if (unlisten) {
+				unlisten();
+				unlisten = null;
+			}
 			if (pollInterval) {
 				clearInterval(pollInterval);
 				pollInterval = null;
 			}
+		},
+		// Legacy methods for compatibility
+		startPolling(intervalMs: number = Timeouts.STATUS_POLL_INTERVAL) {
+			this.startListening();
+		},
+		stopPolling() {
+			this.stopListening();
 		}
 	};
 }
