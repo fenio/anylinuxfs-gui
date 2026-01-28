@@ -14,16 +14,17 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-log": "^2.8.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3",
     "@sveltejs/kit": "^2",
-    "@sveltejs/vite-plugin-svelte": "^4",
+    "@sveltejs/vite-plugin-svelte": "^6",
     "@tauri-apps/cli": "^2",
     "svelte": "^5",
     "typescript": "^5",
-    "vite": "^5"
+    "vite": "^7"
   }
 }

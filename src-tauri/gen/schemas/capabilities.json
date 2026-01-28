@@ -1,1 +1,1 @@
-{"default":{"identifier":"default","description":"Default capabilities for anylinuxfs-gui","local":true,"windows":["main"],"permissions":["core:default","shell:allow-execute","shell:allow-spawn","core:event:default","core:event:allow-emit","core:event:allow-listen"]}}
+{"default":{"identifier":"default","description":"Default capabilities for anylinuxfs-gui","local":true,"windows":["main"],"permissions":["core:default","shell:allow-execute","shell:allow-spawn","core:event:default","core:event:allow-emit","core:event:allow-listen","log:default"]}}

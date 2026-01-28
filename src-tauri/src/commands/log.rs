@@ -84,7 +84,7 @@ pub fn start_log_stream(app: AppHandle) -> Result<(), String> {
         let mut watcher = match RecommendedWatcher::new(tx, Config::default()) {
             Ok(w) => w,
             Err(e) => {
-                eprintln!("Failed to create watcher: {}", e);
+                log::error!("Failed to create watcher: {}", e);
                 state_clone.log_watcher_running.store(false, Ordering::SeqCst);
                 return;
             }
@@ -102,7 +102,7 @@ pub fn start_log_stream(app: AppHandle) -> Result<(), String> {
         // Watch the log directory (parent of log file)
         if let Some(parent) = log_path.parent() {
             if watcher.watch(parent, RecursiveMode::NonRecursive).is_err() {
-                eprintln!("Failed to watch log directory");
+                log::error!("Failed to watch log directory");
                 state_clone.log_watcher_running.store(false, Ordering::SeqCst);
                 return;
             }
@@ -157,7 +157,7 @@ pub fn start_log_stream(app: AppHandle) -> Result<(), String> {
                     }
                 }
                 Ok(Err(e)) => {
-                    eprintln!("Watch error: {:?}", e);
+                    log::error!("Watch error: {:?}", e);
                 }
                 Err(_) => {
                     // Timeout, continue watching
@@ -192,7 +192,7 @@ pub fn start_disk_watcher(app: AppHandle) -> Result<(), String> {
         let mut watcher = match RecommendedWatcher::new(tx, Config::default()) {
             Ok(w) => w,
             Err(e) => {
-                eprintln!("Failed to create disk watcher: {}", e);
+                log::error!("Failed to create disk watcher: {}", e);
                 state_clone.disk_watcher_running.store(false, Ordering::SeqCst);
                 return;
             }
@@ -201,7 +201,7 @@ pub fn start_disk_watcher(app: AppHandle) -> Result<(), String> {
         // Watch /Volumes for mount/unmount events
         let volumes_path = PathBuf::from("/Volumes");
         if watcher.watch(&volumes_path, RecursiveMode::NonRecursive).is_err() {
-            eprintln!("Failed to watch /Volumes");
+            log::error!("Failed to watch /Volumes");
             state_clone.disk_watcher_running.store(false, Ordering::SeqCst);
             return;
         }
@@ -210,7 +210,7 @@ pub fn start_disk_watcher(app: AppHandle) -> Result<(), String> {
         // This catches Linux-only disks that don't get mounted to /Volumes
         let dev_path = PathBuf::from("/dev");
         if watcher.watch(&dev_path, RecursiveMode::NonRecursive).is_err() {
-            eprintln!("Failed to watch /dev (continuing with /Volumes only)");
+            log::error!("Failed to watch /dev (continuing with /Volumes only)");
             // Don't return - /Volumes watching is still useful
         }
 
@@ -250,7 +250,7 @@ pub fn start_disk_watcher(app: AppHandle) -> Result<(), String> {
                     }
                 }
                 Ok(Err(e)) => {
-                    eprintln!("Disk watch error: {:?}", e);
+                    log::error!("Disk watch error: {:?}", e);
                 }
                 Err(_) => {
                     // Timeout - check if we have a pending event that has settled

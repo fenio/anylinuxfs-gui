@@ -2,6 +2,7 @@ mod cli;
 mod commands;
 
 use std::sync::{Arc, Mutex};
+use tauri_plugin_log::{Target, TargetKind};
 use commands::{
     list_disks, mount_disk, unmount_disk, eject_disk, force_cleanup,
     get_mount_status, check_cli,
@@ -17,6 +18,11 @@ use commands::{
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_log::Builder::new().targets([
+            Target::new(TargetKind::Stdout),
+            Target::new(TargetKind::LogDir { file_name: None }),
+            Target::new(TargetKind::Webview),
+        ]).build())
         .plugin(tauri_plugin_shell::init())
         .manage(Arc::new(WatcherState::default()))
         .manage(Arc::new(Mutex::new(PtyState::default())))

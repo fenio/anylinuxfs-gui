@@ -9,6 +9,7 @@
     "shell:allow-spawn",
     "core:event:default",
     "core:event:allow-emit",
-    "core:event:allow-listen"
+    "core:event:allow-listen",
+    "log:default"
   ]
 }
