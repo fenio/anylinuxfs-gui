@@ -5,8 +5,10 @@ A macOS GUI application for [anylinuxfs](https://github.com/nohajc/anylinuxfs) -
 ## Features
 
 - **Disk Management** - Browse and mount Linux partitions (ext2/3/4, btrfs, XFS, ZFS, etc.)
+- **Safe Eject** - Properly unmount and eject external drives with one click
 - **Encrypted Drives** - Support for LUKS and BitLocker encrypted volumes
-- **Embedded VM Shell** - Interactive terminal to the Linux VM with xterm.js
+- **Embedded VM Shell** - Interactive terminal with image selector (Alpine Linux or FreeBSD)
+- **Custom Actions** - Create and manage mount/unmount hooks with environment variables
 - **Image Management** - Install/uninstall VM images (Alpine Linux, FreeBSD for ZFS)
 - **Package Management** - Add/remove custom Alpine packages to extend VM capabilities
 - **Real-time Monitoring** - Live mount status and log viewer with follow mode
