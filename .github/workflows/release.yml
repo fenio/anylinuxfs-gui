@@ -60,11 +60,20 @@ jobs:
           echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
           echo "DMG_PATH=$DMG_PATH" >> $GITHUB_OUTPUT
 
+      - name: Generate changelog
+        id: changelog
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --latest --strip header
+        env:
+          OUTPUT: CHANGELOG.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ steps.checksum.outputs.DMG_PATH }}
-          generate_release_notes: true
+          body: ${{ steps.changelog.outputs.content }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
