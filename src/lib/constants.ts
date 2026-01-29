@@ -1,6 +1,6 @@
 // Tauri event names
 export const Events = {
-	LOG_LINE: 'log-line',
+	LOG_LINES: 'log-lines', // Batched log lines for better performance
 	SHELL_OUTPUT: 'shell-output',
 	SHELL_EXIT: 'shell-exit',
 	DISKS_CHANGED: 'disks-changed',

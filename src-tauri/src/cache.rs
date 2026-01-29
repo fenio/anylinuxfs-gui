@@ -122,8 +122,9 @@ pub fn get_mount_output() -> Option<Output> {
 pub fn is_krun_running() -> bool {
     let cache_key = "pgrep_krun".to_string();
 
-    // Check cache first
+    // Check cache first (also cleanup expired entries periodically)
     let cached = with_cache(|cache| {
+        cache.cleanup_expired(MAX_CACHE_AGE);
         cache.get(&cache_key, PGREP_CACHE_DURATION).cloned()
     }).flatten();
 
@@ -147,8 +148,9 @@ pub fn is_krun_running() -> bool {
 pub fn is_libkrun_running() -> bool {
     let cache_key = "pgrep_libkrun".to_string();
 
-    // Check cache first
+    // Check cache first (also cleanup expired entries periodically)
     let cached = with_cache(|cache| {
+        cache.cleanup_expired(MAX_CACHE_AGE);
         cache.get(&cache_key, PGREP_CACHE_DURATION).cloned()
     }).flatten();
 

@@ -115,7 +115,7 @@ pub fn start_log_stream(app: AppHandle) -> Result<(), String> {
                     if is_our_file {
                         match event.kind {
                             EventKind::Modify(_) | EventKind::Create(_) => {
-                                // Read new lines
+                                // Read new lines and batch them
                                 if let Ok(mut file) = File::open(&log_path) {
                                     let file_len = file.metadata()
                                         .map(|m| m.len())
@@ -124,10 +124,12 @@ pub fn start_log_stream(app: AppHandle) -> Result<(), String> {
                                     if file_len > last_pos {
                                         if file.seek(SeekFrom::Start(last_pos)).is_ok() {
                                             let reader = BufReader::new(&file);
-                                            for line in reader.lines() {
-                                                if let Ok(line) = line {
-                                                    let _ = app.emit("log-line", line);
-                                                }
+                                            // Batch lines to reduce IPC overhead
+                                            let lines: Vec<String> = reader.lines()
+                                                .filter_map(|l| l.ok())
+                                                .collect();
+                                            if !lines.is_empty() {
+                                                let _ = app.emit("log-lines", lines);
                                             }
                                         }
                                         last_pos = file_len;
@@ -135,10 +137,12 @@ pub fn start_log_stream(app: AppHandle) -> Result<(), String> {
                                         // File was truncated, read from beginning
                                         if file.seek(SeekFrom::Start(0)).is_ok() {
                                             let reader = BufReader::new(&file);
-                                            for line in reader.lines() {
-                                                if let Ok(line) = line {
-                                                    let _ = app.emit("log-line", line);
-                                                }
+                                            // Batch lines to reduce IPC overhead
+                                            let lines: Vec<String> = reader.lines()
+                                                .filter_map(|l| l.ok())
+                                                .collect();
+                                            if !lines.is_empty() {
+                                                let _ = app.emit("log-lines", lines);
                                             }
                                         }
                                         last_pos = file_len;

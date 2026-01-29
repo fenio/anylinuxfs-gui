@@ -55,11 +55,13 @@ function createLogsStore() {
 				// Start the backend log watcher
 				await startLogStream();
 
-				// Listen for log events
-				unlisten = await listen<string>(Events.LOG_LINE, (event) => {
+				// Listen for batched log events (more efficient than per-line)
+				unlisten = await listen<string[]>(Events.LOG_LINES, (event) => {
 					update((s) => {
-						const newLine = processLine(event.payload);
-						const newLines = [...s.lines, newLine];
+						const newLines = [...s.lines];
+						for (const line of event.payload) {
+							newLines.push(processLine(line));
+						}
 						// Keep only last MAX_LINES
 						if (newLines.length > Limits.MAX_LOG_LINES) {
 							newLines.splice(0, newLines.length - Limits.MAX_LOG_LINES);

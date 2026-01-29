@@ -5,6 +5,50 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use std::sync::OnceLock;
 
+/// Sanitize error output to avoid exposing sensitive system details
+/// Logs the full error for debugging but returns a user-friendly message
+fn sanitize_error(stdout: &str, stderr: &str) -> String {
+    // Log full details for debugging
+    if !stdout.is_empty() || !stderr.is_empty() {
+        log::debug!("Command failed - stdout: {}, stderr: {}", stdout, stderr);
+    }
+
+    // Check for common error patterns and return user-friendly messages
+    let combined = format!("{}{}", stdout, stderr);
+
+    if combined.contains("not mounted") || combined.contains("No such file") {
+        return "Filesystem is not mounted".to_string();
+    }
+    if combined.contains("Permission denied") {
+        return "Permission denied - try running with administrator privileges".to_string();
+    }
+    if combined.contains("Device busy") || combined.contains("resource busy") {
+        return "Device is busy - close any applications using it and try again".to_string();
+    }
+    if combined.contains("Invalid argument") {
+        return "Invalid operation or unsupported filesystem".to_string();
+    }
+    if combined.contains("No space left") {
+        return "No space left on device".to_string();
+    }
+    if combined.contains("Read-only") {
+        return "Filesystem is read-only".to_string();
+    }
+
+    // For anylinuxfs-specific errors, extract the message after "Error:"
+    if let Some(pos) = combined.find("Error:") {
+        let error_msg = combined[pos + 6..].trim();
+        // Take first line only, limit length
+        let first_line = error_msg.lines().next().unwrap_or(error_msg);
+        if first_line.len() <= 200 {
+            return first_line.to_string();
+        }
+    }
+
+    // Generic fallback - don't expose raw output
+    "Operation failed - check logs for details".to_string()
+}
+
 /// Common locations to search for anylinuxfs
 const SEARCH_PATHS: &[&str] = &[
     "/opt/homebrew/bin/anylinuxfs",
@@ -115,7 +159,7 @@ fn execute_direct(args: &[&str], passphrase: Option<&str>) -> Result<String, Str
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout = String::from_utf8_lossy(&output.stdout);
-        Err(format!("{}{}", stdout, stderr))
+        Err(sanitize_error(&stdout, &stderr))
     }
 }
 
@@ -177,7 +221,7 @@ fn execute_with_sudo(args: &[&str], passphrase: Option<&str>) -> Result<String, 
                     } else if stderr.contains("no askpass program") || stderr.contains("no password was provided") {
                         return Err("Authentication cancelled".to_string());
                     } else {
-                        return Err(format!("{}{}", stdout, stderr));
+                        return Err(sanitize_error(&stdout, &stderr));
                     }
                 }
             }
