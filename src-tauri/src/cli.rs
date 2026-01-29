@@ -1,7 +1,6 @@
 use std::process::{Command, Stdio};
 use std::io::Read;
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use std::sync::OnceLock;
@@ -200,7 +199,16 @@ fn execute_with_sudo(args: &[&str], passphrase: Option<&str>) -> Result<String, 
 }
 
 fn create_askpass_script() -> Result<String, String> {
-    let script_path = "/tmp/anylinuxfs-askpass.sh";
+    use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
+
+    // Use unique filename with PID and timestamp to prevent race conditions
+    let pid = std::process::id();
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let script_path = format!("/tmp/anylinuxfs-askpass-{}-{}.sh", pid, timestamp);
 
     // Create askpass script that uses osascript to prompt for password
     // The password goes directly from osascript to sudo, never through our app
@@ -208,12 +216,17 @@ fn create_askpass_script() -> Result<String, String> {
 osascript -e 'Tell application "System Events" to display dialog "anylinuxfs requires administrator privileges." & return & return & "Enter your password:" with hidden answer default answer "" buttons {"Cancel", "OK"} default button "OK" with title "Authentication Required" with icon caution' -e 'text returned of result' 2>/dev/null
 "#;
 
-    fs::write(script_path, script_content)
+    // Create file with restrictive permissions from the start (0700)
+    // This prevents TOCTOU race conditions
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)  // Fail if file already exists
+        .mode(0o700)
+        .open(&script_path)
         .map_err(|e| format!("Failed to create askpass script: {}", e))?;
 
-    // Make it executable
-    fs::set_permissions(script_path, fs::Permissions::from_mode(0o700))
-        .map_err(|e| format!("Failed to set script permissions: {}", e))?;
+    file.write_all(script_content.as_bytes())
+        .map_err(|e| format!("Failed to write askpass script: {}", e))?;
 
-    Ok(script_path.to_string())
+    Ok(script_path)
 }

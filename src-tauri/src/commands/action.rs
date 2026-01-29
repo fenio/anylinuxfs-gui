@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
+use std::io::Write;
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,6 +49,24 @@ fn get_user_config_path() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("/tmp"))
         .join(".anylinuxfs/config.toml")
+}
+
+/// Write config file with secure permissions (0600 - user read/write only)
+fn write_config_secure(path: &PathBuf, content: &str) -> Result<(), String> {
+    use std::os::unix::fs::OpenOptionsExt;
+
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)
+        .map_err(|e| format!("Failed to open config file: {}", e))?;
+
+    file.write_all(content.as_bytes())
+        .map_err(|e| format!("Failed to write config file: {}", e))?;
+
+    Ok(())
 }
 
 fn get_upstream_config_path() -> PathBuf {
@@ -110,10 +130,13 @@ pub fn create_custom_action(
 ) -> Result<(), String> {
     let config_path = get_user_config_path();
 
-    // Ensure config directory exists
+    // Ensure config directory exists with secure permissions (0700)
     if let Some(parent) = config_path.parent() {
         fs::create_dir_all(parent)
             .map_err(|e| format!("Failed to create config directory: {}", e))?;
+        // Set restrictive permissions on config directory
+        fs::set_permissions(parent, fs::Permissions::from_mode(0o700))
+            .map_err(|e| format!("Failed to set config directory permissions: {}", e))?;
     }
 
     // Read existing config
@@ -153,12 +176,11 @@ pub fn create_custom_action(
 
     custom_actions.insert(name, toml::Value::Table(action_table));
 
-    // Write back
+    // Write back with secure permissions
     let new_content = toml::to_string_pretty(&doc)
         .map_err(|e| format!("Failed to serialize config: {}", e))?;
 
-    fs::write(&config_path, new_content)
-        .map_err(|e| format!("Failed to write config: {}", e))?;
+    write_config_secure(&config_path, &new_content)?;
 
     Ok(())
 }
@@ -215,12 +237,11 @@ pub fn update_custom_action(
 
     custom_actions.insert(name, toml::Value::Table(action_table));
 
-    // Write back
+    // Write back with secure permissions
     let new_content = toml::to_string_pretty(&doc)
         .map_err(|e| format!("Failed to serialize config: {}", e))?;
 
-    fs::write(&config_path, new_content)
-        .map_err(|e| format!("Failed to write config: {}", e))?;
+    write_config_secure(&config_path, &new_content)?;
 
     Ok(())
 }
@@ -253,12 +274,11 @@ pub fn delete_custom_action(name: String) -> Result<(), String> {
         return Err(format!("Action '{}' not found", name));
     }
 
-    // Write back
+    // Write back with secure permissions
     let new_content = toml::to_string_pretty(&doc)
         .map_err(|e| format!("Failed to serialize config: {}", e))?;
 
-    fs::write(&config_path, new_content)
-        .map_err(|e| format!("Failed to write config: {}", e))?;
+    write_config_secure(&config_path, &new_content)?;
 
     Ok(())
 }

@@ -8,6 +8,29 @@ use crate::cache;
 use crate::cli::execute_command;
 use crate::paths::{get_socket_path, COMMAND_TIMEOUT_SECS, MOUNT_TIMEOUT_SECS};
 
+/// Validate device path to prevent command injection
+/// Device must start with /dev/ and contain only safe characters
+fn validate_device_path(device: &str) -> Result<(), String> {
+    if device.is_empty() {
+        return Err("Device path is required".to_string());
+    }
+    if !device.starts_with("/dev/") {
+        return Err("Device path must start with /dev/".to_string());
+    }
+    // Only allow alphanumeric, slash, and common device name characters
+    let valid_chars = device.chars().all(|c| {
+        c.is_ascii_alphanumeric() || c == '/' || c == '-' || c == '_'
+    });
+    if !valid_chars {
+        return Err("Device path contains invalid characters".to_string());
+    }
+    // Prevent path traversal
+    if device.contains("..") {
+        return Err("Device path cannot contain '..'".to_string());
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Partition {
     pub device: String,
@@ -512,6 +535,9 @@ fn parse_type_and_name(parts: &[&str]) -> (String, Option<String>) {
 
 #[tauri::command]
 pub async fn mount_disk(app: AppHandle, device: String, passphrase: Option<String>) -> Result<String, String> {
+    // Validate device path before use
+    validate_device_path(&device)?;
+
     // Run in blocking task with timeout to avoid freezing UI
     let mount_future = tokio::task::spawn_blocking(move || {
         let pass_ref = passphrase.as_deref();
@@ -607,6 +633,9 @@ fn is_vm_running() -> bool {
 
 #[tauri::command]
 pub async fn eject_disk(device: String) -> Result<String, String> {
+    // Validate device path before use
+    validate_device_path(&device)?;
+
     // Eject (power down) a disk using diskutil
     // First unmount anylinuxfs if it has anything mounted, then eject
     let eject_future = tokio::task::spawn_blocking(move || {

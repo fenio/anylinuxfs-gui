@@ -3,6 +3,9 @@ use std::process::{Command, Output};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+/// Maximum number of cache entries to prevent unbounded growth
+const MAX_CACHE_ENTRIES: usize = 50;
+
 /// Cache entry with output and timestamp
 struct CacheEntry {
     output: Output,
@@ -34,6 +37,10 @@ impl CommandCache {
     }
 
     fn insert(&mut self, key: String, output: Output) {
+        // Evict oldest entries if cache is full
+        if self.entries.len() >= MAX_CACHE_ENTRIES {
+            self.evict_oldest();
+        }
         self.entries.insert(key, CacheEntry {
             output,
             timestamp: Instant::now(),
@@ -43,22 +50,50 @@ impl CommandCache {
     fn invalidate(&mut self, prefix: &str) {
         self.entries.retain(|k, _| !k.starts_with(prefix));
     }
+
+    fn evict_oldest(&mut self) {
+        // Find and remove the oldest entry
+        if let Some(oldest_key) = self.entries
+            .iter()
+            .min_by_key(|(_, entry)| entry.timestamp)
+            .map(|(k, _)| k.clone())
+        {
+            self.entries.remove(&oldest_key);
+        }
+    }
+
+    fn cleanup_expired(&mut self, max_age: Duration) {
+        self.entries.retain(|_, entry| entry.timestamp.elapsed() < max_age);
+    }
 }
 
-fn with_cache<F, R>(f: F) -> R
+/// Execute a function with the cache, handling mutex errors gracefully
+fn with_cache<F, R>(f: F) -> Option<R>
 where
     F: FnOnce(&mut CommandCache) -> R,
 {
-    let mut guard = COMMAND_CACHE.lock().unwrap();
+    // Use try_lock or handle poisoned mutex gracefully
+    let mut guard = match COMMAND_CACHE.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            // Recover from poisoned mutex by taking the inner value
+            log::warn!("Cache mutex was poisoned, recovering");
+            poisoned.into_inner()
+        }
+    };
+
     if guard.is_none() {
         *guard = Some(CommandCache::new());
     }
-    f(guard.as_mut().unwrap())
+
+    Some(f(guard.as_mut().unwrap()))
 }
 
 /// Cache durations for different command types
 const MOUNT_CACHE_DURATION: Duration = Duration::from_millis(1000);
 const PGREP_CACHE_DURATION: Duration = Duration::from_millis(500);
+/// Max age for cleanup (entries older than this are removed during cleanup)
+const MAX_CACHE_AGE: Duration = Duration::from_secs(60);
 
 /// Get cached mount command output (1 second cache)
 pub fn get_mount_output() -> Option<Output> {
@@ -66,8 +101,10 @@ pub fn get_mount_output() -> Option<Output> {
 
     // Check cache first
     let cached = with_cache(|cache| {
+        // Periodically clean up expired entries
+        cache.cleanup_expired(MAX_CACHE_AGE);
         cache.get(&cache_key, MOUNT_CACHE_DURATION).cloned()
-    });
+    })?;
 
     if let Some(output) = cached {
         return Some(output);
@@ -88,7 +125,7 @@ pub fn is_krun_running() -> bool {
     // Check cache first
     let cached = with_cache(|cache| {
         cache.get(&cache_key, PGREP_CACHE_DURATION).cloned()
-    });
+    }).flatten();
 
     if let Some(output) = cached {
         return output.status.success() && !output.stdout.is_empty();
@@ -113,7 +150,7 @@ pub fn is_libkrun_running() -> bool {
     // Check cache first
     let cached = with_cache(|cache| {
         cache.get(&cache_key, PGREP_CACHE_DURATION).cloned()
-    });
+    }).flatten();
 
     if let Some(output) = cached {
         return output.status.success() && !output.stdout.is_empty();
