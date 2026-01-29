@@ -62,12 +62,15 @@ jobs:
 
       - name: Generate changelog
         id: changelog
-        uses: orhun/git-cliff-action@v4
-        with:
-          config: cliff.toml
-          args: --latest --strip header
-        env:
-          OUTPUT: CHANGELOG.md
+        run: |
+          # Install git-cliff
+          cargo install git-cliff --locked
+          # Generate changelog for latest tag
+          CHANGELOG=$(git-cliff --config cliff.toml --latest --strip header)
+          # Handle multi-line output for GitHub Actions
+          echo "content<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
