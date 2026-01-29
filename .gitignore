@@ -22,3 +22,6 @@ src-tauri/target/
 # Environment
 .env
 .env.*
+
+# Claude Code instructions (local only)
+CLAUDE.md
