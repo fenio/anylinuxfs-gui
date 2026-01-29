@@ -101,7 +101,8 @@ fn execute_direct(args: &[&str], passphrase: Option<&str>) -> Result<String, Str
 
     let mut cmd = Command::new(cli_path);
     cmd.args(args);
-    cmd.stdin(Stdio::null());
+    // Use piped stdin instead of null - libkrun's epoll fails with /dev/null
+    cmd.stdin(Stdio::piped());
 
     if let Some(pass) = passphrase {
         cmd.env("ALFS_PASSPHRASE", pass);
@@ -134,7 +135,8 @@ fn execute_with_sudo(args: &[&str], passphrase: Option<&str>) -> Result<String, 
     let mut cmd = Command::new("sudo");
     cmd.args(&sudo_args);
     cmd.env("SUDO_ASKPASS", &askpass_script);
-    cmd.stdin(Stdio::null());
+    // Use piped stdin instead of null - libkrun's epoll fails with /dev/null
+    cmd.stdin(Stdio::piped());
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
 
