@@ -239,26 +239,38 @@ fn update_filesystem_support(result: &mut DiskListResult) {
         }
     }
 
-    // Run diskutil info calls in parallel
+    // Run diskutil info calls in parallel with limited concurrency
+    // Limit to 8 concurrent threads to avoid resource exhaustion on systems with many partitions
+    const MAX_DISKUTIL_THREADS: usize = 8;
     let diskutil_results: Arc<Mutex<HashMap<String, (String, bool, Option<String>)>>> =
         Arc::new(Mutex::new(HashMap::new()));
 
-    std::thread::scope(|s| {
-        for device_id in &needs_diskutil {
-            let results = Arc::clone(&diskutil_results);
-            let device = device_id.clone();
-            s.spawn(move || {
-                if let Some(info) = get_diskutil_fs_info(&device) {
-                    results.lock().unwrap().insert(device, info);
-                }
-            });
-        }
-    });
+    // Process in batches to limit concurrency
+    for chunk in needs_diskutil.chunks(MAX_DISKUTIL_THREADS) {
+        std::thread::scope(|s| {
+            for device_id in chunk {
+                let results = Arc::clone(&diskutil_results);
+                let device = device_id.clone();
+                s.spawn(move || {
+                    if let Some(info) = get_diskutil_fs_info(&device) {
+                        // Handle mutex lock failure gracefully
+                        if let Ok(mut guard) = results.lock() {
+                            guard.insert(device, info);
+                        }
+                    }
+                });
+            }
+        });
+    }
 
-    let diskutil_map = Arc::try_unwrap(diskutil_results)
-        .unwrap()
-        .into_inner()
-        .unwrap();
+    // Extract results from Arc<Mutex<...>> safely
+    let diskutil_map = match Arc::try_unwrap(diskutil_results) {
+        Ok(mutex) => mutex.into_inner().unwrap_or_default(),
+        Err(arc) => {
+            // If other references exist (shouldn't happen), clone the inner data
+            arc.lock().map(|g| g.clone()).unwrap_or_default()
+        }
+    };
 
     // Apply results to partitions
     for disk in &mut result.disks {

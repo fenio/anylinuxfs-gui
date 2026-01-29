@@ -4,6 +4,23 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter};
 use crate::cli::get_path;
 
+/// Valid image names for shell command
+/// This whitelist prevents potential command injection via malformed image names
+const VALID_IMAGES: &[&str] = &["alpine", "freebsd-15.0"];
+
+/// Validate image name against whitelist
+fn validate_image_name(image: &str) -> Result<(), String> {
+    if VALID_IMAGES.contains(&image) {
+        Ok(())
+    } else {
+        Err(format!(
+            "Invalid image '{}'. Valid images: {}",
+            image,
+            VALID_IMAGES.join(", ")
+        ))
+    }
+}
+
 pub struct PtyState {
     writer: Option<Box<dyn Write + Send>>,
     master: Option<Box<dyn portable_pty::MasterPty + Send>>,
@@ -41,8 +58,9 @@ pub async fn start_shell(
     let mut cmd = CommandBuilder::new(cli_path);
     cmd.arg("shell");
 
-    // Add image option if specified
+    // Add image option if specified (validated against whitelist)
     if let Some(ref img) = image {
+        validate_image_name(img)?;
         cmd.arg("-i");
         cmd.arg(img);
     }
