@@ -64,22 +64,9 @@ pub struct DiskListResult {
 pub async fn list_disks(use_sudo: bool) -> Result<DiskListResult, String> {
     // Run in blocking task with timeout to avoid freezing UI
     let list_future = tokio::task::spawn_blocking(move || {
-        // Run both list commands and merge results:
-        // - `list` (native): correctly detects Linux filesystems on Linux-only cards
-        // - `list -m` (Microsoft fallback): works with broken GUID tables
-
-        // First, try native detection (without -m)
-        let native_result = execute_command(&["list"], use_sudo, None)
-            .ok()
-            .and_then(|output| parse_disk_list_output(&output).ok());
-
-        // Then get MS fallback (with -m)
-        let ms_result = execute_command(&["list", "-m"], use_sudo, None)
-            .ok()
-            .and_then(|output| parse_disk_list_output(&output).ok());
-
-        // Merge results: prefer native detection, add MS-only disks
-        let mut result = merge_disk_results(native_result, ms_result);
+        // Run list command (now shows all volumes by default, including broken SD cards)
+        let output = execute_command(&["list"], use_sudo, None)?;
+        let mut result = parse_disk_list_output(&output)?;
 
         // Check which partitions are already mounted by the system
         update_mount_status(&mut result);
@@ -100,79 +87,6 @@ pub async fn list_disks(use_sudo: bool) -> Result<DiskListResult, String> {
         .await
         .map_err(|_| format!("List disks timed out after {} seconds", COMMAND_TIMEOUT_SECS))?
         .map_err(|e| format!("Task error: {}", e))?
-}
-
-fn merge_disk_results(
-    native: Option<DiskListResult>,
-    ms: Option<DiskListResult>,
-) -> DiskListResult {
-    use std::collections::HashMap;
-
-    let mut disk_map: HashMap<String, Disk> = HashMap::new();
-
-    // First, add all disks from native detection (preferred)
-    if let Some(native_result) = native {
-        for disk in native_result.disks {
-            disk_map.insert(disk.device.clone(), disk);
-        }
-    }
-
-    // Then, add disks from MS fallback that weren't in native
-    // For disks that exist in both, merge partitions preferring native filesystem detection
-    if let Some(ms_result) = ms {
-        for ms_disk in ms_result.disks {
-            if let Some(native_disk) = disk_map.get_mut(&ms_disk.device) {
-                // Disk exists in both - merge partitions
-                merge_partitions(native_disk, ms_disk);
-            } else {
-                // Disk only in MS result - add it
-                disk_map.insert(ms_disk.device.clone(), ms_disk);
-            }
-        }
-    }
-
-    // Convert map to sorted vec
-    let mut disks: Vec<Disk> = disk_map.into_values().collect();
-    disks.sort_by(|a, b| a.device.cmp(&b.device));
-
-    DiskListResult {
-        disks,
-        has_supported_partitions: false,
-        used_admin_mode: false,
-    }
-}
-
-fn merge_partitions(native_disk: &mut Disk, ms_disk: Disk) {
-    use std::collections::HashMap;
-
-    // Build map of native partitions by device
-    let mut partition_map: HashMap<String, Partition> = HashMap::new();
-    for partition in native_disk.partitions.drain(..) {
-        partition_map.insert(partition.device.clone(), partition);
-    }
-
-    // Merge with MS partitions
-    for ms_partition in ms_disk.partitions {
-        if let Some(native_partition) = partition_map.get_mut(&ms_partition.device) {
-            // Partition exists in both - prefer native filesystem if it's a known Linux type
-            // Otherwise use MS detection
-            if !is_linux_native_fs(&native_partition.filesystem)
-                && native_partition.filesystem == "Microsoft Basic Data"
-            {
-                // Native showed generic type, use MS detection
-                native_partition.filesystem = ms_partition.filesystem;
-                native_partition.label = ms_partition.label;
-            }
-        } else {
-            // Partition only in MS result - add it
-            partition_map.insert(ms_partition.device.clone(), ms_partition);
-        }
-    }
-
-    // Restore partitions sorted by device
-    let mut partitions: Vec<Partition> = partition_map.into_values().collect();
-    partitions.sort_by(|a, b| a.device.cmp(&b.device));
-    native_disk.partitions = partitions;
 }
 
 fn update_mount_status(result: &mut DiskListResult) {
