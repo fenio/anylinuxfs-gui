@@ -3,7 +3,7 @@
 	import { Terminal } from '@xterm/xterm';
 	import { FitAddon } from '@xterm/addon-fit';
 	import { listen } from '@tauri-apps/api/event';
-	import { startShell, writeShell, resizeShell, stopShell, getMountStatus } from '$lib/api';
+	import { startShell, writeShell, resizeShell, stopShell, getMountStatus, listImages, type VmImage } from '$lib/api';
 	import { Events } from '$lib/constants';
 	import { logAction, logError } from '$lib/logger';
 	import '@xterm/xterm/css/xterm.css';
@@ -14,7 +14,8 @@
 	let running = $state(false);
 	let error = $state<string | null>(null);
 	let isMounted = $state(false);
-	let selectedImage = $state('alpine');
+	let selectedImage = $state('');
+	let installedImages = $state<VmImage[]>([]);
 	let unlistenOutput: (() => void) | null = null;
 	let unlistenExit: (() => void) | null = null;
 
@@ -24,6 +25,19 @@
 			isMounted = status.mounted;
 		} catch {
 			isMounted = false;
+		}
+	}
+
+	async function loadInstalledImages() {
+		try {
+			const images = await listImages();
+			installedImages = images.filter(img => img.installed);
+			// Set default selection to first installed image if not already set
+			if (!selectedImage && installedImages.length > 0) {
+				selectedImage = installedImages[0].name;
+			}
+		} catch (e) {
+			console.error('Failed to load images:', e);
 		}
 	}
 
@@ -92,8 +106,9 @@
 			terminal?.writeln('\r\n\x1b[33m[Shell exited. Click "Start Shell" to reconnect.]\x1b[0m');
 		});
 
-		// Check mount status
+		// Check mount status and load available images
 		await checkMountStatus();
+		await loadInstalledImages();
 
 		return () => {
 			resizeObserver.disconnect();
@@ -166,11 +181,15 @@
 			{#if isMounted}
 				<span class="status-badge warning">Filesystem mounted</span>
 			{:else if !running}
-				<select class="image-select" bind:value={selectedImage}>
-					<option value="alpine">Alpine Linux</option>
-					<option value="freebsd">FreeBSD</option>
+				<select class="image-select" bind:value={selectedImage} disabled={installedImages.length === 0}>
+					{#each installedImages as image}
+						<option value={image.name}>{image.name}</option>
+					{/each}
+					{#if installedImages.length === 0}
+						<option value="">No images installed</option>
+					{/if}
 				</select>
-				<button class="btn-primary" onclick={handleStart}>Start Shell</button>
+				<button class="btn-primary" onclick={handleStart} disabled={installedImages.length === 0}>Start Shell</button>
 			{:else}
 				<span class="status-badge">Connected</span>
 				<button class="btn-secondary" onclick={handleStop}>Stop</button>

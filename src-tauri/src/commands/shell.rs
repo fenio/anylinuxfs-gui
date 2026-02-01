@@ -4,21 +4,20 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter};
 use crate::cli::get_path;
 
-/// Valid image names for shell command
-/// This whitelist prevents potential command injection via malformed image names
-const VALID_IMAGES: &[&str] = &["alpine", "freebsd-15.0"];
-
-/// Validate image name against whitelist
+/// Validate image name format to prevent path traversal or command injection
+/// Image names should only contain alphanumeric characters, hyphens, dots, and underscores
 fn validate_image_name(image: &str) -> Result<(), String> {
-    if VALID_IMAGES.contains(&image) {
-        Ok(())
-    } else {
-        Err(format!(
-            "Invalid image '{}'. Valid images: {}",
-            image,
-            VALID_IMAGES.join(", ")
-        ))
+    if image.is_empty() {
+        return Err("Image name cannot be empty".to_string());
     }
+    let valid = image.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.' || c == '_');
+    if !valid {
+        return Err(format!("Invalid image name '{}': contains invalid characters", image));
+    }
+    if image.contains("..") {
+        return Err("Image name cannot contain '..'".to_string());
+    }
+    Ok(())
 }
 
 pub struct PtyState {
