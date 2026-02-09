@@ -1,6 +1,6 @@
 {
   "name": "anylinuxfs-gui",
-  "version": "0.3.1",
+  "version": "0.3.3",
   "private": true,
   "type": "module",
   "scripts": {
@@ -19,8 +19,8 @@
     "@xterm/xterm": "^6.0.0"
   },
   "devDependencies": {
-    "@sveltejs/adapter-static": "^3",
-    "@sveltejs/kit": "^2",
+    "@sveltejs/adapter-static": "^3.0.10",
+    "@sveltejs/kit": "^2.50.2",
     "@sveltejs/vite-plugin-svelte": "^6",
     "@tauri-apps/cli": "^2",
     "svelte": "^5",
