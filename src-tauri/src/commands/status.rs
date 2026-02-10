@@ -11,6 +11,7 @@ pub struct CliStatus {
     pub available: bool,
     pub path: String,
     pub initialized: bool,
+    pub reinit_pending: bool,
     pub cli_version: Option<String>,
     pub gui_version: String,
 }
@@ -24,14 +25,90 @@ fn check_vm_initialized() -> bool {
     }
 }
 
+fn check_reinit_pending() -> bool {
+    let cli_path = match cli::get_path() {
+        Some(p) => p,
+        None => return false,
+    };
+
+    // Resolve symlink to get the real install path
+    // e.g. /opt/homebrew/Cellar/anylinuxfs/0.11.2/bin/anylinuxfs
+    let real_path = match std::fs::canonicalize(cli_path) {
+        Ok(p) => p,
+        Err(_) => return false,
+    };
+
+    // Go up 2 levels (past bin/anylinuxfs) to get install prefix
+    let prefix = match real_path.parent().and_then(|p| p.parent()) {
+        Some(p) => p,
+        None => return false,
+    };
+
+    let home = match dirs::home_dir() {
+        Some(h) => h,
+        None => return false,
+    };
+
+    let anylinuxfs_dir = home.join(".anylinuxfs");
+
+    // Check alpine: compare {prefix}/share/alpine/rootfs.ver vs ~/.anylinuxfs/alpine/rootfs.ver
+    let alpine_desired = prefix.join("share/alpine/rootfs.ver");
+    let alpine_installed = anylinuxfs_dir.join("alpine/rootfs.ver");
+    if version_mismatch(&alpine_desired, &alpine_installed) {
+        return true;
+    }
+
+    // Check freebsd: directory is freebsd-15.0 etc., so scan for freebsd* dirs
+    let freebsd_desired = prefix.join("share/freebsd/rootfs.ver");
+    if freebsd_desired.exists() {
+        if let Ok(entries) = std::fs::read_dir(&anylinuxfs_dir) {
+            let mut found_installed = false;
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let name_str = name.to_string_lossy();
+                if name_str.starts_with("freebsd") && entry.path().is_dir() {
+                    let installed_ver = entry.path().join("rootfs.ver");
+                    if version_mismatch(&freebsd_desired, &installed_ver) {
+                        return true;
+                    }
+                    found_installed = true;
+                }
+            }
+            // Desired version exists but no installed freebsd directory found
+            if !found_installed {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
+fn version_mismatch(desired: &std::path::Path, installed: &std::path::Path) -> bool {
+    let desired_ver = match std::fs::read_to_string(desired) {
+        Ok(v) => v.trim().to_string(),
+        Err(_) => return false, // No desired version file → no reinit needed
+    };
+
+    let installed_ver = match std::fs::read_to_string(installed) {
+        Ok(v) => v.trim().to_string(),
+        Err(_) => return true, // Desired exists but installed doesn't → reinit pending
+    };
+
+    desired_ver != installed_ver
+}
+
 #[tauri::command]
 pub fn check_cli() -> CliStatus {
+    let available = cli::is_available();
+    let initialized = check_vm_initialized();
     CliStatus {
-        available: cli::is_available(),
+        available,
         path: cli::get_path()
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|| "not found".to_string()),
-        initialized: check_vm_initialized(),
+        initialized,
+        reinit_pending: if available { check_reinit_pending() } else { false },
         cli_version: cli::get_version(),
         gui_version: env!("CARGO_PKG_VERSION").to_string(),
     }

@@ -45,6 +45,7 @@ export interface CliStatus {
 	available: boolean;
 	path: string;
 	initialized: boolean;
+	reinit_pending: boolean;
 	cli_version: string | null;
 	gui_version: string;
 }

@@ -7,20 +7,22 @@
 
 	let cliMissing = $state(false);
 	let vmNotInitialized = $state(false);
+	let reinitPending = $state(false);
 
 	async function checkCliStatus() {
 		const cliStatus = await checkCli();
 		cliMissing = !cliStatus.available;
 		vmNotInitialized = cliStatus.available && !cliStatus.initialized;
+		reinitPending = cliStatus.available && cliStatus.initialized && cliStatus.reinit_pending;
 	}
 
 	onMount(() => {
 		checkCliStatus();
 	});
 
-	// Recheck init status when mount status changes (VM gets initialized on first mount)
+	// Recheck init status when mount status changes (VM gets initialized on first mount/reinit)
 	$effect(() => {
-		if ($status.info.mounted && vmNotInitialized) {
+		if ($status.info.mounted && (vmNotInitialized || reinitPending)) {
 			checkCliStatus();
 		}
 	});
@@ -47,6 +49,15 @@
 				<strong>First run setup required</strong>
 				<p>The first mount will download the Linux VM image (~50 MB).</p>
 				<p>This may take a minute depending on your connection.</p>
+			</div>
+		</div>
+	{:else if reinitPending}
+		<div class="cli-warning init-warning">
+			<span class="warning-icon">i</span>
+			<div class="warning-content">
+				<strong>VM image update pending</strong>
+				<p>The next operation will update the VM image.</p>
+				<p>This may take a moment.</p>
 			</div>
 		</div>
 	{/if}
