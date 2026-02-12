@@ -260,8 +260,8 @@
 {#if showForm}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<div class="modal-overlay" onclick={closeForm} role="presentation">
-		<!-- svelte-ignore a11y_click_events_have_key_events a11y_interactive_supports_focus -->
-		<div class="modal" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<div class="modal" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1">
 			<div class="modal-header">
 				<h3>{editingAction ? 'Edit Action' : 'New Action'}</h3>
 				<button class="modal-close" onclick={closeForm}>&times;</button>
@@ -277,7 +277,6 @@
 						placeholder="my-action"
 						required
 						autocomplete="off"
-						autocorrect="off"
 						spellcheck="false"
 					/>
 					{#if editingAction}
@@ -293,7 +292,6 @@
 						bind:value={formDescription}
 						placeholder="Optional description of what this action does"
 						autocomplete="off"
-						autocorrect="off"
 						spellcheck="false"
 					/>
 				</div>
@@ -306,7 +304,6 @@
 						rows="3"
 						placeholder="Commands to run before mounting"
 						autocomplete="off"
-						autocorrect="off"
 						spellcheck="false"
 					></textarea>
 				</div>
@@ -319,7 +316,6 @@
 						rows="3"
 						placeholder="Commands to run after mounting"
 						autocomplete="off"
-						autocorrect="off"
 						spellcheck="false"
 					></textarea>
 				</div>
@@ -332,7 +328,6 @@
 						rows="3"
 						placeholder="Commands to run before unmounting"
 						autocomplete="off"
-						autocorrect="off"
 						spellcheck="false"
 					></textarea>
 				</div>
@@ -345,7 +340,6 @@
 						rows="2"
 						placeholder="KEY=VALUE (one per line)"
 						autocomplete="off"
-						autocorrect="off"
 						spellcheck="false"
 					></textarea>
 					<span class="field-hint">Variables to pass to the mount scripts</span>
@@ -359,7 +353,6 @@
 						rows="2"
 						placeholder="VARIABLE_NAME (one per line)"
 						autocomplete="off"
-						autocorrect="off"
 						spellcheck="false"
 					></textarea>
 					<span class="field-hint">Host environment variables to capture and pass through</span>
@@ -373,7 +366,6 @@
 						bind:value={formOverrideNfsExport}
 						placeholder="Custom NFS export path"
 						autocomplete="off"
-						autocorrect="off"
 						spellcheck="false"
 					/>
 				</div>

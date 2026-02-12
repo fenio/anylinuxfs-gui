@@ -41,7 +41,7 @@
 		}
 	}
 
-	onMount(async () => {
+	onMount(() => {
 		terminal = new Terminal({
 			cursorBlink: true,
 			fontSize: 14,
@@ -94,21 +94,21 @@
 		});
 		resizeObserver.observe(terminalEl);
 
-		// Listen for shell output
-		unlistenOutput = await listen<string>(Events.SHELL_OUTPUT, (event) => {
-			terminal?.write(event.payload);
-		});
+		// Async setup (listeners, status check)
+		(async () => {
+			unlistenOutput = await listen<string>(Events.SHELL_OUTPUT, (event) => {
+				terminal?.write(event.payload);
+			});
 
-		// Listen for shell exit
-		unlistenExit = await listen(Events.SHELL_EXIT, () => {
-			running = false;
-			logAction('Shell exited');
-			terminal?.writeln('\r\n\x1b[33m[Shell exited. Click "Start Shell" to reconnect.]\x1b[0m');
-		});
+			unlistenExit = await listen(Events.SHELL_EXIT, () => {
+				running = false;
+				logAction('Shell exited');
+				terminal?.writeln('\r\n\x1b[33m[Shell exited. Click "Start Shell" to reconnect.]\x1b[0m');
+			});
 
-		// Check mount status and load available images
-		await checkMountStatus();
-		await loadInstalledImages();
+			await checkMountStatus();
+			await loadInstalledImages();
+		})();
 
 		return () => {
 			resizeObserver.disconnect();
