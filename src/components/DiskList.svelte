@@ -135,6 +135,11 @@
 			<div class="disk-group">
 				<div class="disk-header">
 					<span class="disk-device">{disk.device}</span>
+					{#if disk.disk_type === 'raid'}
+						<span class="type-badge">RAID</span>
+					{:else if disk.disk_type === 'lvm'}
+						<span class="type-badge">LVM</span>
+					{/if}
 					{#if disk.model}
 						<span class="disk-model">{disk.model}</span>
 					{/if}
@@ -352,6 +357,15 @@
 		font-family: monospace;
 		font-weight: 600;
 		color: var(--text-primary);
+	}
+
+	.type-badge {
+		font-size: 11px;
+		font-weight: 600;
+		padding: 1px 6px;
+		border-radius: 4px;
+		background: var(--info-bg);
+		color: var(--info-color);
 	}
 
 	.disk-model {

@@ -23,17 +23,20 @@ export const Limits = {
 
 // Device validation
 const DEVICE_PATH_REGEX = /^\/dev\/[a-zA-Z0-9_-]+[a-zA-Z0-9_\-s]*$/;
+const RAID_PATH_REGEX = /^raid:[a-zA-Z0-9:_-]+$/;
+const LVM_PATH_REGEX = /^lvm:[a-zA-Z0-9:_-]+$/;
 
 export function isValidDevicePath(device: string): boolean {
-	return DEVICE_PATH_REGEX.test(device) && device.length <= 64;
+	if (device.length > 128) return false;
+	return DEVICE_PATH_REGEX.test(device) || RAID_PATH_REGEX.test(device) || LVM_PATH_REGEX.test(device);
 }
 
 export function validateDevicePath(device: string): string | null {
 	if (!device) {
 		return 'Device path is required';
 	}
-	if (!device.startsWith('/dev/')) {
-		return 'Device path must start with /dev/';
+	if (!device.startsWith('/dev/') && !device.startsWith('raid:') && !device.startsWith('lvm:')) {
+		return 'Device path must start with /dev/, raid:, or lvm:';
 	}
 	if (!isValidDevicePath(device)) {
 		return 'Invalid device path format';

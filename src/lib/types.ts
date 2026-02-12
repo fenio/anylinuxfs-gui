@@ -10,11 +10,14 @@ export interface Partition {
 	support_note: string | null;
 }
 
+export type DiskType = 'normal' | 'raid' | 'lvm';
+
 export interface Disk {
 	device: string;
 	size: string;
 	model: string | null;
 	is_external: boolean;
+	disk_type: DiskType;
 	partitions: Partition[];
 }
 

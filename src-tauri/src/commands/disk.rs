@@ -9,26 +9,43 @@ use crate::cli::execute_command;
 use crate::paths::{get_socket_path, COMMAND_TIMEOUT_SECS, MOUNT_TIMEOUT_SECS};
 
 /// Validate device path to prevent command injection
-/// Device must start with /dev/ and contain only safe characters
+/// Device must start with /dev/, raid:, or lvm: and contain only safe characters
 fn validate_device_path(device: &str) -> Result<(), String> {
     if device.is_empty() {
         return Err("Device path is required".to_string());
-    }
-    if !device.starts_with("/dev/") {
-        return Err("Device path must start with /dev/".to_string());
-    }
-    // Only allow alphanumeric, slash, and common device name characters
-    let valid_chars = device.chars().all(|c| {
-        c.is_ascii_alphanumeric() || c == '/' || c == '-' || c == '_'
-    });
-    if !valid_chars {
-        return Err("Device path contains invalid characters".to_string());
     }
     // Prevent path traversal
     if device.contains("..") {
         return Err("Device path cannot contain '..'".to_string());
     }
+    if device.starts_with("/dev/") {
+        // Normal device: allow alphanumeric, slash, dash, underscore
+        let valid_chars = device.chars().all(|c| {
+            c.is_ascii_alphanumeric() || c == '/' || c == '-' || c == '_'
+        });
+        if !valid_chars {
+            return Err("Device path contains invalid characters".to_string());
+        }
+    } else if device.starts_with("raid:") || device.starts_with("lvm:") {
+        // RAID/LVM: allow alphanumeric, colon, dash, underscore
+        let valid_chars = device.chars().all(|c| {
+            c.is_ascii_alphanumeric() || c == ':' || c == '-' || c == '_'
+        });
+        if !valid_chars {
+            return Err("Device path contains invalid characters".to_string());
+        }
+    } else {
+        return Err("Device path must start with /dev/, raid:, or lvm:".to_string());
+    }
     Ok(())
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum DiskType {
+    Normal,
+    Raid,
+    Lvm,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,6 +67,7 @@ pub struct Disk {
     pub size: String,
     pub model: Option<String>,
     pub is_external: bool,
+    pub disk_type: DiskType,
     pub partitions: Vec<Partition>,
 }
 
@@ -139,10 +157,13 @@ fn update_filesystem_support(result: &mut DiskListResult) {
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
 
-    // Collect partitions that need diskutil info
+    // Collect partitions that need diskutil info (skip RAID/LVM — diskutil won't know about them)
     let mut needs_diskutil: Vec<String> = Vec::new();
 
     for disk in &result.disks {
+        if disk.disk_type != DiskType::Normal {
+            continue; // Skip virtual volumes — diskutil won't know about them
+        }
         for partition in &disk.partitions {
             let (supported, _) = check_filesystem_support(&partition.filesystem);
             // Skip if anylinuxfs already detected a supported Linux-native filesystem
@@ -190,6 +211,13 @@ fn update_filesystem_support(result: &mut DiskListResult) {
     for disk in &mut result.disks {
         for partition in &mut disk.partitions {
             let (supported, note) = check_filesystem_support(&partition.filesystem);
+
+            // For RAID/LVM partitions, use filesystem info from list output directly
+            if disk.disk_type != DiskType::Normal {
+                partition.supported = supported;
+                partition.support_note = note;
+                continue;
+            }
 
             // If anylinuxfs detected a known supported filesystem, use that
             if supported && is_linux_native_fs(&partition.filesystem) {
@@ -286,7 +314,7 @@ fn check_filesystem_support(fs: &str) -> (bool, Option<String>) {
     }
 
     // Unknown filesystem
-    if fs.is_empty() {
+    if fs.is_empty() || fs_lower == "unknown" {
         return (false, Some("Unknown filesystem".to_string()));
     }
 
@@ -294,13 +322,43 @@ fn check_filesystem_support(fs: &str) -> (bool, Option<String>) {
     (true, Some(format!("Unverified: {}", fs)))
 }
 
+/// Extract model and is_external from parenthesized info in a disk header line
+fn extract_parenthesized_info(line: &str) -> (Option<String>, bool) {
+    if let Some(start) = line.find('(') {
+        if let Some(end) = line.find(')') {
+            let info = line[start+1..end].to_string();
+            let external = info.to_lowercase().contains("external");
+            return (Some(info), external);
+        }
+    }
+    (None, false)
+}
+
 fn parse_disk_list_output(output: &str) -> Result<DiskListResult, String> {
     let mut disks: Vec<Disk> = Vec::new();
     let mut current_disk: Option<Disk> = None;
 
     for line in output.lines() {
-        // Check if this is a disk header line (starts with /dev/)
-        if line.starts_with("/dev/") {
+        // Detect disk header type
+        let header = if line.starts_with("/dev/") {
+            let device = line.split_whitespace().next().unwrap_or("").to_string();
+            let (model, is_external) = extract_parenthesized_info(line);
+            Some((device, model, is_external, DiskType::Normal))
+        } else if line.starts_with("raid:") {
+            let device = line.split_whitespace().next().unwrap_or("")
+                .trim_end_matches(':').to_string();
+            let (model, _) = extract_parenthesized_info(line);
+            Some((device, model, false, DiskType::Raid))
+        } else if line.starts_with("lvm:") {
+            let device = line.split_whitespace().next().unwrap_or("")
+                .trim_end_matches(':').to_string();
+            let (model, _) = extract_parenthesized_info(line);
+            Some((device, model, false, DiskType::Lvm))
+        } else {
+            None
+        };
+
+        if let Some((device, model, is_external, disk_type)) = header {
             // Save previous disk if any
             if let Some(disk) = current_disk.take() {
                 if !disk.partitions.is_empty() {
@@ -308,38 +366,34 @@ fn parse_disk_list_output(output: &str) -> Result<DiskListResult, String> {
                 }
             }
 
-            // Parse disk line: /dev/disk6 (internal, physical):
-            let device = line.split_whitespace().next().unwrap_or("").to_string();
-
-            // Extract info from parentheses
-            let (model, is_external) = if let Some(start) = line.find('(') {
-                if let Some(end) = line.find(')') {
-                    let info = line[start+1..end].to_string();
-                    let external = info.to_lowercase().contains("external");
-                    (Some(info), external)
-                } else {
-                    (None, false)
-                }
-            } else {
-                (None, false)
-            };
-
             current_disk = Some(Disk {
                 device,
                 size: String::new(), // Will be set from partition 0
                 model,
                 is_external,
+                disk_type,
                 partitions: Vec::new(),
             });
         } else if line.trim().starts_with("#:") {
             // Skip header line
             continue;
         } else if let Some(ref mut disk) = current_disk {
-            // Try to parse as partition line
-            // Format: "   1:       Microsoft Basic Data NO NAME                 47.2 GB    disk6s1"
             let trimmed = line.trim();
             if trimmed.is_empty() {
                 continue;
+            }
+
+            // For RAID/LVM, skip non-partition continuation lines
+            // (Physical Store lines, bare disk member lines, etc.)
+            if disk.disk_type != DiskType::Normal {
+                if let Some(colon_pos) = trimmed.find(':') {
+                    let num_part = &trimmed[..colon_pos];
+                    if !num_part.chars().all(|c| c.is_ascii_digit()) {
+                        continue; // Not a partition line — skip
+                    }
+                } else {
+                    continue; // No colon — skip
+                }
             }
 
             // Check if line starts with a number followed by colon
@@ -349,10 +403,14 @@ fn parse_disk_list_output(output: &str) -> Result<DiskListResult, String> {
                     let partition_num: u32 = num_part.parse().unwrap_or(0);
                     let rest = trimmed[colon_pos+1..].trim();
 
-                    if let Some(partition) = parse_partition_line(rest, &disk.device, partition_num) {
-                        // Partition 0 is the partition scheme - use its size for the disk
+                    if let Some(partition) = parse_partition_line(rest, &disk.device, partition_num, &disk.disk_type) {
                         if partition_num == 0 {
+                            // Partition 0: always use its size for the disk
                             disk.size = partition.size.clone();
+                            // For RAID/LVM, partition 0 IS the mountable volume
+                            if disk.disk_type != DiskType::Normal {
+                                disk.partitions.push(partition);
+                            }
                         } else {
                             disk.partitions.push(partition);
                         }
@@ -376,7 +434,7 @@ fn parse_disk_list_output(output: &str) -> Result<DiskListResult, String> {
     })
 }
 
-fn parse_partition_line(line: &str, _disk_device: &str, _partition_num: u32) -> Option<Partition> {
+fn parse_partition_line(line: &str, _disk_device: &str, _partition_num: u32, disk_type: &DiskType) -> Option<Partition> {
     // Format: "Microsoft Basic Data NO NAME                 47.2 GB    disk6s1"
     // Or:     "ext4 linuxrootfs             7.5 GB     disk6s5"
     // The identifier is always at the end, size is before it
@@ -389,10 +447,10 @@ fn parse_partition_line(line: &str, _disk_device: &str, _partition_num: u32) -> 
     // Last part is the identifier (e.g., disk6s1)
     let identifier = parts.last()?;
 
-    // Second to last and third to last form the size (e.g., "47.2 GB" or "*62.5 GB")
+    // Second to last and third to last form the size (e.g., "47.2 GB" or "*62.5 GB" or "+62.5 GB")
     let size_unit = parts.get(parts.len() - 2)?;
     let size_num = parts.get(parts.len() - 3)?;
-    let size = format!("{} {}", size_num.trim_start_matches('*'), size_unit);
+    let size = format!("{} {}", size_num.trim_start_matches('*').trim_start_matches('+'), size_unit);
 
     // Everything before the size is TYPE and NAME
     // TYPE is known keywords, NAME is the rest
@@ -406,8 +464,12 @@ fn parse_partition_line(line: &str, _disk_device: &str, _partition_num: u32) -> 
         || filesystem.to_lowercase().contains("bitlocker")
         || line.to_lowercase().contains("encrypted");
 
-    // Build the device path
-    let device = format!("/dev/{}", identifier);
+    // Build the device path based on disk type
+    let device = match disk_type {
+        DiskType::Normal => format!("/dev/{}", identifier),
+        DiskType::Raid => format!("raid:{}", identifier),
+        DiskType::Lvm => format!("lvm:{}", identifier),
+    };
 
     Some(Partition {
         device,
@@ -467,7 +529,13 @@ pub async fn mount_disk(app: AppHandle, device: String, passphrase: Option<Strin
     // Run in blocking task with timeout to avoid freezing UI
     let mount_future = tokio::task::spawn_blocking(move || {
         let pass_ref = passphrase.as_deref();
-        let result = execute_command(&["mount", &device], true, pass_ref);
+        // RAID/LVM: the device identifier IS the argument (e.g., anylinuxfs raid:disk10s1:disk11s1)
+        // Normal: use explicit mount subcommand
+        let result = if device.starts_with("raid:") || device.starts_with("lvm:") {
+            execute_command(&[&device], true, pass_ref)
+        } else {
+            execute_command(&["mount", &device], true, pass_ref)
+        };
 
         // Check immediately first, then retry with short intervals
         // 40 retries × 250ms = 10 seconds total timeout
