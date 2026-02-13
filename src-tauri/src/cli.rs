@@ -183,8 +183,14 @@ fn execute_with_sudo(args: &[&str], passphrase: Option<&str>) -> Result<String, 
     let askpass_script = create_askpass_script()?;
 
     // Build the command arguments for sudo with SUDO_ASKPASS
+    // Preserve ALFS_PASSPHRASE through sudo — macOS may pass env vars through
+    // despite env_reset, but other systems enforce it strictly
     let cli_path_str = cli_path.to_string_lossy();
-    let mut sudo_args: Vec<&str> = vec!["-A", "--", &cli_path_str];
+    let mut sudo_args: Vec<&str> = if passphrase.is_some() {
+        vec!["-A", "--preserve-env=ALFS_PASSPHRASE", "--", &cli_path_str]
+    } else {
+        vec!["-A", "--", &cli_path_str]
+    };
     sudo_args.extend(args.iter().copied());
 
     let mut cmd = Command::new("sudo");
