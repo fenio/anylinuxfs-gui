@@ -174,17 +174,90 @@ fn execute_direct(args: &[&str], passphrase: Option<&str>) -> Result<String, Str
     }
 }
 
+/// Try sudo via native PAM auth (handles cached credentials, Touch ID, Apple Watch)
+/// Returns None if auth fails/unavailable, falling back to askpass dialog
+fn try_sudo_native(cli_path: &Path, args: &[&str], passphrase: Option<&str>) -> Option<Result<String, String>> {
+    let cli_path_str = cli_path.to_string_lossy();
+    let mut sudo_args: Vec<&str> = if passphrase.is_some() {
+        vec!["--preserve-env=ALFS_PASSPHRASE", "--", &*cli_path_str]
+    } else {
+        vec!["--", &*cli_path_str]
+    };
+    sudo_args.extend(args.iter().copied());
+
+    let mut cmd = Command::new("sudo");
+    cmd.args(&sudo_args);
+    cmd.stdin(Stdio::piped());
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+
+    if let Some(pass) = passphrase {
+        cmd.env("ALFS_PASSPHRASE", pass);
+    }
+
+    let mut child = cmd.spawn().ok()?;
+
+    // Native auth (cached creds, biometric) is fast — give it 10 seconds
+    let timeout = Duration::from_secs(10);
+    let start = Instant::now();
+
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let mut stdout = String::new();
+                let mut stderr = String::new();
+                if let Some(ref mut out) = child.stdout {
+                    let _ = out.read_to_string(&mut stdout);
+                }
+                if let Some(ref mut err) = child.stderr {
+                    let _ = err.read_to_string(&mut stderr);
+                }
+
+                if status.success() {
+                    return Some(Ok(stdout));
+                }
+                // If sudo failed because no credential (user denied Touch ID
+                // or no cached credential), return None to fall back to askpass
+                if stderr.contains("a password is required")
+                    || stderr.contains("no askpass")
+                    || stderr.contains("a terminal is required")
+                {
+                    return None;
+                }
+                // Real error — return it
+                return Some(Err(sanitize_error(&stdout, &stderr)));
+            }
+            Ok(None) => {
+                if start.elapsed() > timeout {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return None; // Timeout — fall back to askpass
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            Err(_) => return None,
+        }
+    }
+}
+
 fn execute_with_sudo(args: &[&str], passphrase: Option<&str>) -> Result<String, String> {
     let cli_path = get_anylinuxfs_path()
         .ok_or_else(|| "anylinuxfs CLI not found in PATH or standard locations".to_string())?;
 
-    // Create a temporary askpass script that uses osascript
-    // This way the password never passes through our code
+    // Try native PAM auth first (handles cached credentials, Touch ID, Apple Watch)
+    // If it fails or is unavailable, fall back to askpass password dialog
+    match try_sudo_native(cli_path, args, passphrase) {
+        Some(Ok(stdout)) => return Ok(stdout),
+        Some(Err(e)) => return Err(e),
+        None => {
+            log::debug!("sudo: native auth unavailable, falling back to password dialog");
+        }
+    }
+
+    // Fall back to askpass dialog
     let askpass_script = create_askpass_script()?;
 
-    // Build the command arguments for sudo with SUDO_ASKPASS
-    // Preserve ALFS_PASSPHRASE through sudo — macOS may pass env vars through
-    // despite env_reset, but other systems enforce it strictly
+    // Preserve ALFS_PASSPHRASE through sudo — env_reset strips it otherwise
     let cli_path_str = cli_path.to_string_lossy();
     let mut sudo_args: Vec<&str> = if passphrase.is_some() {
         vec!["-A", "--preserve-env=ALFS_PASSPHRASE", "--", &cli_path_str]
