@@ -165,12 +165,12 @@ fn update_filesystem_support(result: &mut DiskListResult) {
             continue; // Skip virtual volumes — diskutil won't know about them
         }
         for partition in &disk.partitions {
-            let (supported, _) = check_filesystem_support(&partition.filesystem);
-            // Skip if anylinuxfs already detected a supported Linux-native filesystem
-            if !(supported && is_linux_native_fs(&partition.filesystem)) {
-                let device_id = partition.device.trim_start_matches("/dev/").to_string();
-                needs_diskutil.push(device_id);
+            // Skip if anylinuxfs already detected a known Linux-native filesystem type
+            if is_linux_native_fs(&partition.filesystem) {
+                continue;
             }
+            let device_id = partition.device.trim_start_matches("/dev/").to_string();
+            needs_diskutil.push(device_id);
         }
     }
 
@@ -219,9 +219,9 @@ fn update_filesystem_support(result: &mut DiskListResult) {
                 continue;
             }
 
-            // If anylinuxfs detected a known supported filesystem, use that
-            if supported && is_linux_native_fs(&partition.filesystem) {
-                partition.supported = true;
+            // If anylinuxfs detected a known Linux-native filesystem type, use that directly
+            if is_linux_native_fs(&partition.filesystem) {
+                partition.supported = supported;
                 partition.support_note = note;
                 continue;
             }
@@ -248,6 +248,8 @@ fn is_linux_native_fs(fs: &str) -> bool {
         || fs_lower.contains("btrfs") || fs_lower.contains("xfs") || fs_lower.contains("f2fs")
         || fs_lower.contains("reiserfs") || fs_lower.contains("zfs")
         || fs_lower.contains("ntfs") || fs_lower.contains("exfat")
+        || fs_lower.contains("luks")
+        || fs_lower.contains("lvm") || fs_lower.contains("raid")
         || fs_lower == "linux filesystem"
 }
 
@@ -283,6 +285,19 @@ fn check_filesystem_support(fs: &str) -> (bool, Option<String>) {
         || fs_lower.contains("reiserfs")
     {
         return (true, None);
+    }
+
+    // LUKS encrypted partitions — supported, passphrase will be requested at mount time
+    if fs_lower.contains("luks") {
+        return (true, Some("Encrypted (passphrase required)".to_string()));
+    }
+
+    // RAID/LVM member partitions — not directly mountable, use admin mode for actual volumes
+    if fs_lower.contains("raid") {
+        return (false, Some("RAID member (use admin mode for volumes)".to_string()));
+    }
+    if fs_lower.contains("lvm") {
+        return (false, Some("LVM member (use admin mode for volumes)".to_string()));
     }
 
     // Generic "Linux Filesystem" from GPT partition type (native anylinuxfs detection)
@@ -347,13 +362,11 @@ fn parse_disk_list_output(output: &str) -> Result<DiskListResult, String> {
         } else if line.starts_with("raid:") {
             let device = line.split_whitespace().next().unwrap_or("")
                 .trim_end_matches(':').to_string();
-            let (model, _) = extract_parenthesized_info(line);
-            Some((device, model, false, DiskType::Raid))
+            Some((device, Some("Autodetected RAID volume".to_string()), false, DiskType::Raid))
         } else if line.starts_with("lvm:") {
             let device = line.split_whitespace().next().unwrap_or("")
                 .trim_end_matches(':').to_string();
-            let (model, _) = extract_parenthesized_info(line);
-            Some((device, model, false, DiskType::Lvm))
+            Some((device, Some("Autodetected LVM volume group".to_string()), false, DiskType::Lvm))
         } else {
             None
         };
@@ -407,8 +420,9 @@ fn parse_disk_list_output(output: &str) -> Result<DiskListResult, String> {
                         if partition_num == 0 {
                             // Partition 0: always use its size for the disk
                             disk.size = partition.size.clone();
-                            // For RAID/LVM, partition 0 IS the mountable volume
-                            if disk.disk_type != DiskType::Normal {
+                            // For RAID, partition 0 IS the mountable volume
+                            // For LVM, partition 0 is the VG scheme (not mountable)
+                            if disk.disk_type == DiskType::Raid {
                                 disk.partitions.push(partition);
                             }
                         } else {
@@ -493,6 +507,8 @@ fn parse_type_and_name(parts: &[&str]) -> (String, Option<String>) {
         "Apple APFS",
         "Apple HFS",
         "Linux Filesystem",
+        "Linux LVM",
+        "Linux RAID",
         "GUID_partition_scheme",
     ];
 
@@ -528,7 +544,11 @@ pub async fn mount_disk(app: AppHandle, device: String, passphrase: Option<Strin
 
     // Run in blocking task with timeout to avoid freezing UI
     let mount_future = tokio::task::spawn_blocking(move || {
-        let pass_ref = passphrase.as_deref();
+        // If no passphrase provided, use a dummy one so LUKS fails fast
+        // instead of hanging waiting for stdin input
+        let effective_passphrase = passphrase.unwrap_or_else(|| "##PROBE##".to_string());
+        let pass_ref = Some(effective_passphrase.as_str());
+
         // RAID/LVM: the device identifier IS the argument (e.g., anylinuxfs raid:disk10s1:disk11s1)
         // Normal: use explicit mount subcommand
         let result = if device.starts_with("raid:") || device.starts_with("lvm:") {
@@ -536,6 +556,33 @@ pub async fn mount_disk(app: AppHandle, device: String, passphrase: Option<Strin
         } else {
             execute_command(&["mount", &device], true, pass_ref)
         };
+
+        // Helper to detect encryption-related output
+        let is_encryption_error = |text: &str| -> bool {
+            let lower = text.to_lowercase();
+            lower.contains("luks") || lower.contains("decrypt")
+                || lower.contains("passphrase") || lower.contains("password")
+                || lower.contains("encrypted") || lower.contains("wrong key")
+        };
+
+        // Check if failure was due to encryption — clean up and return special error
+        let output_text = match &result {
+            Ok(out) => out.clone(),
+            Err(e) => e.clone(),
+        };
+        if is_encryption_error(&output_text) {
+            // Clean up any leftover VM/processes from the failed probe attempt
+            let _ = execute_command(&["stop"], true, None);
+            for _ in 0..20 {
+                thread::sleep(Duration::from_millis(250));
+                cache::invalidate_process_cache();
+                if !cache::is_krun_running() {
+                    break;
+                }
+            }
+            cache::invalidate_all();
+            return Err("ENCRYPTION_REQUIRED: This partition is encrypted. A passphrase is needed to mount it.".to_string());
+        }
 
         // Check immediately first, then retry with short intervals
         // 40 retries × 250ms = 10 seconds total timeout

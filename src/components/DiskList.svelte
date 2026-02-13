@@ -42,11 +42,15 @@
 
 	async function handlePassphraseSubmit(passphrase: string) {
 		if (passphraseDevice) {
-			const success = await disks.mount(passphraseDevice, passphrase);
-			if (success) {
+			const device = passphraseDevice;
+			passphraseDevice = null; // Close dialog while mounting
+			const result = await disks.mount(device, passphrase);
+			if (result === 'success') {
 				status.refresh();
+			} else if (result === 'encryption_required') {
+				// Wrong passphrase — re-show dialog
+				passphraseDevice = device;
 			}
-			passphraseDevice = null;
 		}
 	}
 
@@ -111,11 +115,15 @@
 		</div>
 	{/if}
 
-	{#if !$disks.loading && !$disks.hasSupportedPartitions && !$disks.adminMode && $disks.disks.length > 0}
+	{#if !$disks.loading && !$disks.adminMode && $disks.disks.length > 0}
 		<div class="admin-hint">
 			<span class="hint-icon">i</span>
 			<span class="hint-text">
-				No supported filesystems detected. Enable <strong>Admin mode</strong> to detect Linux filesystems (ext4, btrfs, etc.)
+				{#if !$disks.hasSupportedPartitions}
+					No supported filesystems detected. Enable <strong>Admin mode</strong> for reliable filesystem detection.
+				{:else}
+					Enable <strong>Admin mode</strong> to reliably detect filesystems, RAID arrays, LVM volumes, and encrypted partitions.
+				{/if}
 			</span>
 		</div>
 	{/if}
@@ -127,21 +135,22 @@
 		</div>
 	{:else if $disks.disks.length === 0}
 		<div class="empty">
-			<p>No Linux disks found.</p>
-			<p class="hint">Connect a drive with a Linux filesystem to get started.</p>
+			<p>No external disks found.</p>
+			<p class="hint">Connect a drive to get started.</p>
 		</div>
 	{:else}
 		{#each $disks.disks as disk (disk.device)}
 			<div class="disk-group">
 				<div class="disk-header">
-					<span class="disk-device">{disk.device}</span>
 					{#if disk.disk_type === 'raid'}
-						<span class="type-badge">RAID</span>
+						<span class="disk-label">Autodetected <span class="type-badge raid">RAID</span> volume</span>
 					{:else if disk.disk_type === 'lvm'}
-						<span class="type-badge">LVM</span>
-					{/if}
-					{#if disk.model}
-						<span class="disk-model">{disk.model}</span>
+						<span class="disk-label">Autodetected <span class="type-badge lvm">LVM</span> volume group</span>
+					{:else}
+						<span class="disk-device">{disk.device}</span>
+						{#if disk.model}
+							<span class="disk-model">{disk.model}</span>
+						{/if}
 					{/if}
 					<span class="disk-size">{disk.size}</span>
 					{#if disk.is_external}
@@ -359,13 +368,27 @@
 		color: var(--text-primary);
 	}
 
+	.disk-label {
+		font-size: 14px;
+		font-weight: 500;
+		color: var(--text-primary);
+	}
+
 	.type-badge {
 		font-size: 11px;
 		font-weight: 600;
 		padding: 1px 6px;
 		border-radius: 4px;
+	}
+
+	.type-badge.raid {
 		background: var(--info-bg);
 		color: var(--info-color);
+	}
+
+	.type-badge.lvm {
+		background: rgba(175, 82, 222, 0.12);
+		color: #af52de;
 	}
 
 	.disk-model {

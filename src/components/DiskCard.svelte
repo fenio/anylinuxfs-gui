@@ -18,9 +18,12 @@
 		if (partition.encrypted) {
 			onRequestPassphrase(partition.device);
 		} else {
-			await disks.mount(partition.device);
-			// Always refresh status after mount attempt
-			status.refresh();
+			const result = await disks.mount(partition.device);
+			if (result === 'encryption_required') {
+				onRequestPassphrase(partition.device);
+			} else {
+				status.refresh();
+			}
 		}
 	}
 </script>
@@ -35,8 +38,8 @@
 			{#if partition.mounted_by_system}
 				<span class="mounted-badge" title="Already mounted by macOS">Mounted</span>
 			{/if}
-			{#if !partition.supported}
-				<span class="unsupported-badge" title={partition.support_note || 'Unsupported'}>Unsupported</span>
+			{#if !partition.supported && !partition.support_note}
+				<span class="unsupported-badge">Unsupported</span>
 			{/if}
 		</div>
 		<div class="partition-details">
@@ -138,7 +141,7 @@
 
 	.status-note {
 		font-size: 12px;
-		color: var(--text-tertiary);
+		color: var(--text-secondary);
 		font-style: italic;
 		text-align: right;
 		white-space: nowrap;

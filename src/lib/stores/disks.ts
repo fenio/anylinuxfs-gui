@@ -53,13 +53,13 @@ function createDisksStore() {
 			currentAdminMode = enabled;
 			update((s) => ({ ...s, adminMode: enabled }));
 		},
-		async mount(device: string, passphrase?: string) {
+		async mount(device: string, passphrase?: string): Promise<'success' | 'encryption_required' | 'error'> {
 			// Validate device path
 			const validationError = validateDevicePath(device);
 			if (validationError) {
 				logError('mount', new Error(validationError));
 				update((s) => ({ ...s, error: validationError }));
-				return false;
+				return 'error';
 			}
 
 			const mountId = Date.now();
@@ -69,8 +69,17 @@ function createDisksStore() {
 				await mountDisk(device, passphrase);
 				logAction('Mount completed', { device });
 				update((s) => ({ ...s, mountingDevice: null }));
-				return true;
+				return 'success';
 			} catch (e) {
+				const errorStr = String(e);
+
+				// Detect encryption-required error from backend
+				if (errorStr.includes('ENCRYPTION_REQUIRED')) {
+					logAction('Encryption detected, passphrase needed', { device });
+					update((s) => ({ ...s, mountingDevice: null }));
+					return 'encryption_required';
+				}
+
 				logError('mount', e);
 				// Don't show error if:
 				// - Unmount was requested while mounting
@@ -78,10 +87,10 @@ function createDisksStore() {
 				// - A different mount operation started
 				update((s) => ({
 					...s,
-					error: (s.recentUnmount || s.mountingDevice === null || s.currentMountId !== mountId) ? null : String(e),
+					error: (s.recentUnmount || s.mountingDevice === null || s.currentMountId !== mountId) ? null : errorStr,
 					mountingDevice: s.currentMountId === mountId ? null : s.mountingDevice
 				}));
-				return false;
+				return 'error';
 			}
 		},
 		async unmount() {

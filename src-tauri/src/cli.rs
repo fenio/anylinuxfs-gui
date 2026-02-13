@@ -35,6 +35,17 @@ fn sanitize_error(stdout: &str, stderr: &str) -> String {
         return "Filesystem is read-only".to_string();
     }
 
+    // LUKS/encryption errors — pass through with keyword so mount_disk can detect them
+    if combined.contains("LUKS") || combined.contains("luks")
+        || combined.contains("decrypt") || combined.contains("passphrase")
+        || combined.contains("encrypted") || combined.contains("wrong key")
+    {
+        return format!("Encrypted volume - {}", combined.lines()
+            .find(|l| l.to_lowercase().contains("luks") || l.to_lowercase().contains("decrypt")
+                || l.to_lowercase().contains("passphrase") || l.to_lowercase().contains("encrypted"))
+            .unwrap_or("decryption failed"));
+    }
+
     // For anylinuxfs-specific errors, extract the message after "Error:"
     if let Some(pos) = combined.find("Error:") {
         let error_msg = combined[pos + 6..].trim();
