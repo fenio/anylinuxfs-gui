@@ -492,7 +492,7 @@ fn parse_type_and_name(parts: &[&str]) -> (String, Option<String>) {
 }
 
 #[tauri::command]
-pub async fn mount_disk(app: AppHandle, device: String, passphrase: Option<String>) -> Result<String, String> {
+pub async fn mount_disk(app: AppHandle, device: String, passphrase: Option<String>, read_only: Option<bool>) -> Result<String, String> {
     // Validate device path before use
     validate_device_path(&device)?;
 
@@ -502,13 +502,24 @@ pub async fn mount_disk(app: AppHandle, device: String, passphrase: Option<Strin
         // instead of hanging waiting for stdin input
         let effective_passphrase = passphrase.unwrap_or_else(|| "##PROBE##".to_string());
         let pass_ref = Some(effective_passphrase.as_str());
+        let ro = read_only.unwrap_or(false);
 
         // RAID/LVM: the device identifier IS the argument (e.g., anylinuxfs raid:disk10s1:disk11s1)
         // Normal: use explicit mount subcommand
         let result = if device.starts_with("raid:") || device.starts_with("lvm:") {
-            execute_command(&[&device], true, pass_ref)
+            let mut args: Vec<&str> = Vec::new();
+            if ro {
+                args.extend_from_slice(&["-o", "ro"]);
+            }
+            args.push(&device);
+            execute_command(&args, true, pass_ref)
         } else {
-            execute_command(&["mount", &device], true, pass_ref)
+            let mut args: Vec<&str> = vec!["mount"];
+            if ro {
+                args.extend_from_slice(&["-o", "ro"]);
+            }
+            args.push(&device);
+            execute_command(&args, true, pass_ref)
         };
 
         // Helper to detect encryption-related output

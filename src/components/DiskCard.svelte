@@ -5,22 +5,23 @@
 
 	interface Props {
 		partition: Partition;
-		onRequestPassphrase: (device: string) => void;
+		onRequestPassphrase: (device: string, readOnly: boolean) => void;
 	}
 
 	let { partition, onRequestPassphrase }: Props = $props();
 
+	let readOnly = $state(false);
 	let mounting = $derived($disks.mountingDevice === partition.device);
 	let isUnavailable = $derived(partition.mounted_by_system || !partition.supported);
 	let isDisabled = $derived(isUnavailable || $isMounted);
 
 	async function handleMount() {
 		if (partition.encrypted) {
-			onRequestPassphrase(partition.device);
+			onRequestPassphrase(partition.device, readOnly);
 		} else {
-			const result = await disks.mount(partition.device);
+			const result = await disks.mount(partition.device, undefined, readOnly);
 			if (result === 'encryption_required') {
-				onRequestPassphrase(partition.device);
+				onRequestPassphrase(partition.device, readOnly);
 			} else {
 				status.refresh();
 			}
@@ -58,19 +59,29 @@
 	{:else if !partition.supported}
 		<span class="status-note" title={partition.support_note || ''}>{partition.support_note || 'Unsupported filesystem'}</span>
 	{:else}
-		<button
-			class="mount-btn"
-			onclick={handleMount}
-			disabled={mounting || $isMounted}
-			title={$isMounted ? 'Unmount current disk first' : 'Mount this partition'}
-		>
-			{#if mounting}
-				<span class="spinner"></span>
-				Mounting...
-			{:else}
-				Mount
-			{/if}
-		</button>
+		<div class="mount-controls">
+			<label class="ro-toggle" title="Mount read-only">
+				<input
+					type="checkbox"
+					bind:checked={readOnly}
+					disabled={mounting || $isMounted}
+				/>
+				<span>RO</span>
+			</label>
+			<button
+				class="mount-btn"
+				onclick={handleMount}
+				disabled={mounting || $isMounted}
+				title={$isMounted ? 'Unmount current disk first' : 'Mount this partition'}
+			>
+				{#if mounting}
+					<span class="spinner"></span>
+					Mounting...
+				{:else}
+					Mount
+				{/if}
+			</button>
+		</div>
 	{/if}
 </div>
 
@@ -172,6 +183,30 @@
 		background: var(--badge-bg);
 		padding: 1px 6px;
 		border-radius: 4px;
+	}
+
+	.mount-controls {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.ro-toggle {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		font-size: 12px;
+		color: var(--text-secondary);
+		cursor: pointer;
+		white-space: nowrap;
+	}
+
+	.ro-toggle input {
+		cursor: pointer;
+	}
+
+	.ro-toggle input:disabled {
+		cursor: not-allowed;
 	}
 
 	.mount-btn {

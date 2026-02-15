@@ -12,6 +12,7 @@
 	let ejectingDevice: string | null = $state(null);
 
 	let passphraseDevice: string | null = $state(null);
+	let passphraseReadOnly = $state(false);
 	let submittingPassphrase = $state(false);
 
 	onMount(() => {
@@ -37,8 +38,9 @@
 		}
 	});
 
-	function handleRequestPassphrase(device: string) {
+	function handleRequestPassphrase(device: string, readOnly: boolean) {
 		passphraseDevice = device;
+		passphraseReadOnly = readOnly;
 	}
 
 	async function handlePassphraseSubmit(passphrase: string) {
@@ -46,8 +48,9 @@
 		submittingPassphrase = true;
 		try {
 			const device = passphraseDevice;
+			const ro = passphraseReadOnly;
 			passphraseDevice = null; // Close dialog while mounting
-			const result = await disks.mount(device, passphrase);
+			const result = await disks.mount(device, passphrase, ro);
 			if (result === 'success') {
 				status.refresh();
 			} else if (result === 'encryption_required') {
