@@ -12,6 +12,7 @@
 	let ejectingDevice: string | null = $state(null);
 
 	let passphraseDevice: string | null = $state(null);
+	let submittingPassphrase = $state(false);
 
 	onMount(() => {
 		disks.refresh();
@@ -41,7 +42,9 @@
 	}
 
 	async function handlePassphraseSubmit(passphrase: string) {
-		if (passphraseDevice) {
+		if (submittingPassphrase || !passphraseDevice) return;
+		submittingPassphrase = true;
+		try {
 			const device = passphraseDevice;
 			passphraseDevice = null; // Close dialog while mounting
 			const result = await disks.mount(device, passphrase);
@@ -51,6 +54,8 @@
 				// Wrong passphrase — re-show dialog
 				passphraseDevice = device;
 			}
+		} finally {
+			submittingPassphrase = false;
 		}
 	}
 
@@ -69,6 +74,7 @@
 	}
 
 	async function handleEject(device: string) {
+		if (ejectingDevice) return; // Already ejecting something
 		ejectingDevice = device;
 		try {
 			logAction('Ejecting disk', { device });

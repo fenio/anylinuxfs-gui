@@ -54,6 +54,10 @@ function createDisksStore() {
 			update((s) => ({ ...s, adminMode: enabled }));
 		},
 		async mount(device: string, passphrase?: string): Promise<'success' | 'encryption_required' | 'error'> {
+			// Reject if any mount/unmount is already in progress
+			const current = get({ subscribe });
+			if (current.mountingDevice) return 'error';
+
 			// Validate device path
 			const validationError = validateDevicePath(device);
 			if (validationError) {
@@ -94,6 +98,10 @@ function createDisksStore() {
 			}
 		},
 		async unmount() {
+			// Reject if any mount/unmount is already in progress
+			const current = get({ subscribe });
+			if (current.mountingDevice) return false;
+
 			// Set recentUnmount to suppress stale mount errors and orphan warnings
 			if (unmountTimeout) clearTimeout(unmountTimeout);
 			logAction('Unmount started');

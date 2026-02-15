@@ -34,6 +34,15 @@ impl Default for PtyState {
     }
 }
 
+impl PtyState {
+    pub fn shutdown(&mut self) {
+        // Drop writer first to send EOF
+        self.writer = None;
+        // Drop master to close PTY
+        self.master = None;
+    }
+}
+
 #[tauri::command]
 pub async fn start_shell(
     app: AppHandle,
@@ -166,7 +175,6 @@ pub fn resize_shell(
 #[tauri::command]
 pub fn stop_shell(state: tauri::State<'_, Arc<Mutex<PtyState>>>) -> Result<(), String> {
     let mut pty_state = state.lock().map_err(|e| format!("Lock error: {}", e))?;
-    pty_state.writer = None;
-    pty_state.master = None;
+    pty_state.shutdown();
     Ok(())
 }

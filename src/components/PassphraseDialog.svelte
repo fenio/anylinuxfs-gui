@@ -20,13 +20,22 @@
 	function handleSubmit(e: Event) {
 		e.preventDefault();
 		if (passphrase.trim()) {
-			onSubmit(passphrase);
+			const value = passphrase;
+			passphrase = '';
+			showPassphrase = false;
+			onSubmit(value);
 		}
+	}
+
+	function handleCancel() {
+		passphrase = '';
+		showPassphrase = false;
+		onCancel();
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Escape') {
-			onCancel();
+			handleCancel();
 		}
 	}
 </script>
@@ -65,7 +74,7 @@
 			</form>
 		</div>
 		<div class="dialog-footer">
-			<button class="btn-secondary" onclick={onCancel}>Cancel</button>
+			<button class="btn-secondary" onclick={handleCancel}>Cancel</button>
 			<button
 				class="btn-primary"
 				onclick={handleSubmit}

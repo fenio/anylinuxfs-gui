@@ -154,66 +154,14 @@ fn get_system_mounts() -> Vec<(String, String)> {
 }
 
 fn update_filesystem_support(result: &mut DiskListResult) {
-    use std::collections::HashMap;
-    use std::sync::{Arc, Mutex};
+    // Run a single diskutil info -all call and parse the combined output
+    let diskutil_info = get_all_diskutil_info();
 
-    // Collect partitions that need diskutil info (skip RAID/LVM — diskutil won't know about them)
-    let mut needs_diskutil: Vec<String> = Vec::new();
-
-    for disk in &result.disks {
-        if disk.disk_type != DiskType::Normal {
-            continue; // Skip virtual volumes — diskutil won't know about them
-        }
-        for partition in &disk.partitions {
-            // Skip if anylinuxfs already detected a known Linux-native filesystem type
-            if is_linux_native_fs(&partition.filesystem) {
-                continue;
-            }
-            let device_id = partition.device.trim_start_matches("/dev/").to_string();
-            needs_diskutil.push(device_id);
-        }
-    }
-
-    // Run diskutil info calls in parallel with limited concurrency
-    // Limit to 8 concurrent threads to avoid resource exhaustion on systems with many partitions
-    const MAX_DISKUTIL_THREADS: usize = 8;
-    let diskutil_results: Arc<Mutex<HashMap<String, (String, bool, Option<String>)>>> =
-        Arc::new(Mutex::new(HashMap::new()));
-
-    // Process in batches to limit concurrency
-    for chunk in needs_diskutil.chunks(MAX_DISKUTIL_THREADS) {
-        std::thread::scope(|s| {
-            for device_id in chunk {
-                let results = Arc::clone(&diskutil_results);
-                let device = device_id.clone();
-                s.spawn(move || {
-                    if let Some(info) = get_diskutil_fs_info(&device) {
-                        // Handle mutex lock failure gracefully
-                        if let Ok(mut guard) = results.lock() {
-                            guard.insert(device, info);
-                        }
-                    }
-                });
-            }
-        });
-    }
-
-    // Extract results from Arc<Mutex<...>> safely
-    let diskutil_map = match Arc::try_unwrap(diskutil_results) {
-        Ok(mutex) => mutex.into_inner().unwrap_or_default(),
-        Err(arc) => {
-            // If other references exist (shouldn't happen), clone the inner data
-            arc.lock().map(|g| g.clone()).unwrap_or_default()
-        }
-    };
-
-    // Apply results to partitions
     for disk in &mut result.disks {
         for partition in &mut disk.partitions {
-            let (supported, note) = check_filesystem_support(&partition.filesystem);
-
             // For RAID/LVM partitions, use filesystem info from list output directly
             if disk.disk_type != DiskType::Normal {
+                let (supported, note) = check_filesystem_support(&partition.filesystem);
                 partition.supported = supported;
                 partition.support_note = note;
                 continue;
@@ -221,25 +169,54 @@ fn update_filesystem_support(result: &mut DiskListResult) {
 
             // If anylinuxfs detected a known Linux-native filesystem type, use that directly
             if is_linux_native_fs(&partition.filesystem) {
+                let (supported, note) = check_filesystem_support(&partition.filesystem);
                 partition.supported = supported;
                 partition.support_note = note;
                 continue;
             }
 
-            // Apply diskutil results if available
+            // Look up diskutil results if available
             let device_id = partition.device.trim_start_matches("/dev/");
-            if let Some((fs_personality, diskutil_supported, diskutil_note)) = diskutil_map.get(device_id) {
+            if let Some(fs_personality) = diskutil_info.get(device_id) {
+                let (supported, note) = check_filesystem_support(fs_personality);
                 if !fs_personality.is_empty() && !is_linux_native_fs(&partition.filesystem) {
                     partition.filesystem = fs_personality.clone();
                 }
-                partition.supported = *diskutil_supported;
-                partition.support_note = diskutil_note.clone();
+                partition.supported = supported;
+                partition.support_note = note;
             } else {
+                let (supported, note) = check_filesystem_support(&partition.filesystem);
                 partition.supported = supported;
                 partition.support_note = note;
             }
         }
     }
+}
+
+fn get_all_diskutil_info() -> std::collections::HashMap<String, String> {
+    use std::collections::HashMap;
+
+    let mut map = HashMap::new();
+    let output = match Command::new("diskutil").args(["info", "-all"]).output() {
+        Ok(o) => o,
+        Err(_) => return map,
+    };
+    let text = String::from_utf8_lossy(&output.stdout);
+    for block in text.split("**********") {
+        let mut device_id = None;
+        let mut fs_personality = None;
+        for line in block.lines() {
+            if line.contains("Device Identifier:") {
+                device_id = line.split(':').nth(1).map(|s| s.trim().to_string());
+            } else if line.contains("File System Personality:") {
+                fs_personality = line.split(':').nth(1).map(|s| s.trim().to_string());
+            }
+        }
+        if let (Some(id), Some(fs)) = (device_id, fs_personality) {
+            map.insert(id, fs);
+        }
+    }
+    map
 }
 
 fn is_linux_native_fs(fs: &str) -> bool {
@@ -251,29 +228,6 @@ fn is_linux_native_fs(fs: &str) -> bool {
         || fs_lower.contains("luks")
         || fs_lower.contains("lvm") || fs_lower.contains("raid")
         || fs_lower == "linux filesystem"
-}
-
-fn get_diskutil_fs_info(device_id: &str) -> Option<(String, bool, Option<String>)> {
-    let output = Command::new("diskutil")
-        .args(["info", device_id])
-        .output()
-        .ok()?;
-
-    let info = String::from_utf8_lossy(&output.stdout);
-
-    let mut fs_personality = String::new();
-
-    for line in info.lines() {
-        if line.contains("File System Personality:") {
-            fs_personality = line.split(':').nth(1)?.trim().to_string();
-            break;
-        }
-    }
-
-    // Determine support based on filesystem personality
-    let (supported, note) = check_filesystem_support(&fs_personality);
-
-    Some((fs_personality, supported, note))
 }
 
 fn check_filesystem_support(fs: &str) -> (bool, Option<String>) {

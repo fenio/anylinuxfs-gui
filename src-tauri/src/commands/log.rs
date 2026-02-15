@@ -28,6 +28,13 @@ impl Default for WatcherState {
     }
 }
 
+impl WatcherState {
+    pub fn shutdown(&self) {
+        self.log_watcher_stop.store(true, Ordering::SeqCst);
+        self.disk_watcher_stop.store(true, Ordering::SeqCst);
+    }
+}
+
 #[tauri::command]
 pub fn get_log_content(lines: Option<usize>) -> Result<Vec<String>, String> {
     let log_path = get_log_path();

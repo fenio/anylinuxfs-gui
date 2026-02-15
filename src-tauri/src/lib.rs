@@ -8,6 +8,7 @@ pub use error::{AppError, AppResult};
 pub use paths::{get_socket_path, get_log_path, COMMAND_TIMEOUT_SECS, MOUNT_TIMEOUT_SECS};
 
 use std::sync::{Arc, Mutex};
+use tauri::Manager;
 use tauri_plugin_log::{Target, TargetKind};
 use commands::{
     list_disks, mount_disk, unmount_disk, eject_disk, force_cleanup,
@@ -32,6 +33,20 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .manage(Arc::new(WatcherState::default()))
         .manage(Arc::new(Mutex::new(PtyState::default())))
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Destroyed = event {
+                let app = window.app_handle();
+                // Stop watchers
+                let watcher_state = app.state::<Arc<WatcherState>>();
+                watcher_state.shutdown();
+                // Stop PTY
+                let pty_arc = app.state::<Arc<Mutex<PtyState>>>().inner().clone();
+                let lock_result = pty_arc.lock();
+                if let Ok(mut state) = lock_result {
+                    state.shutdown();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             list_disks,
             mount_disk,
