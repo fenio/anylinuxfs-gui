@@ -10,9 +10,34 @@
 	import { logAction, logError } from '$lib/logger';
 
 	let ejectingDevice: string | null = $state(null);
+	let showErrorDetails = $state(false);
+
+	function summarizeError(error: string): { summary: string; details: string | null } {
+		// Look for the most relevant error line
+		const lines = error.split('\n').map((l) => l.trim()).filter(Boolean);
+
+		// Try to find a Linux mount error line (most useful to the user)
+		const mountError = lines.find((l) => l.startsWith('Linux: mount:'));
+		if (mountError) {
+			// Strip the "Linux: " prefix for cleaner display
+			const summary = 'Mount failed: ' + mountError.replace(/^Linux:\s*/, '');
+			return { summary, details: lines.length > 1 ? error : null };
+		}
+
+		// Try to find any "Mount failed:" prefix
+		const mountFailed = lines.find((l) => l.startsWith('Mount failed:'));
+		if (mountFailed) {
+			return { summary: mountFailed, details: lines.length > 1 ? error : null };
+		}
+
+		// Fallback: first meaningful line as summary
+		const summary = lines[0] || error;
+		return { summary, details: lines.length > 1 ? error : null };
+	}
 
 	let passphraseDevice: string | null = $state(null);
 	let passphraseReadOnly = $state(false);
+	let passphraseExtraOptions = $state('');
 	let submittingPassphrase = $state(false);
 
 	onMount(() => {
@@ -38,9 +63,10 @@
 		}
 	});
 
-	function handleRequestPassphrase(device: string, readOnly: boolean) {
+	function handleRequestPassphrase(device: string, readOnly: boolean, extraOptions: string) {
 		passphraseDevice = device;
 		passphraseReadOnly = readOnly;
+		passphraseExtraOptions = extraOptions;
 	}
 
 	async function handlePassphraseSubmit(passphrase: string) {
@@ -49,8 +75,9 @@
 		try {
 			const device = passphraseDevice;
 			const ro = passphraseReadOnly;
+			const extra = passphraseExtraOptions;
 			passphraseDevice = null; // Close dialog while mounting
-			const result = await disks.mount(device, passphrase, ro);
+			const result = await disks.mount(device, passphrase, ro, extra);
 			if (result === 'success') {
 				status.refresh();
 			} else if (result === 'encryption_required') {
@@ -117,10 +144,25 @@
 	</div>
 
 	{#if $disks.error}
+		{@const { summary, details } = summarizeError($disks.error)}
 		<div class="error-banner">
 			<span class="error-icon">!</span>
-			<span class="error-message">{$disks.error}</span>
-			<button class="dismiss-btn" onclick={() => disks.clearError()}>Dismiss</button>
+			<div class="error-content">
+				<div class="error-top">
+					<span class="error-message">{summary}</span>
+					<div class="error-actions">
+						{#if details}
+							<button class="details-btn" onclick={() => (showErrorDetails = !showErrorDetails)}>
+								{showErrorDetails ? 'Less' : 'Details'}
+							</button>
+						{/if}
+						<button class="dismiss-btn" onclick={() => { disks.clearError(); showErrorDetails = false; }}>Dismiss</button>
+					</div>
+				</div>
+				{#if showErrorDetails && details}
+					<pre class="error-details">{details}</pre>
+				{/if}
+			</div>
 		</div>
 	{/if}
 
@@ -263,7 +305,7 @@
 
 	.error-banner {
 		display: flex;
-		align-items: center;
+		align-items: flex-start;
 		gap: 10px;
 		padding: 12px 16px;
 		background: var(--error-bg);
@@ -283,12 +325,45 @@
 		border-radius: 50%;
 		font-size: 12px;
 		font-weight: bold;
+		flex-shrink: 0;
+		margin-top: 1px;
+	}
+
+	.error-content {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.error-top {
+		display: flex;
+		align-items: center;
+		gap: 10px;
 	}
 
 	.error-message {
 		flex: 1;
 		font-size: 13px;
 		color: var(--error-color);
+	}
+
+	.error-actions {
+		display: flex;
+		gap: 6px;
+		flex-shrink: 0;
+	}
+
+	.details-btn {
+		padding: 4px 10px;
+		border-radius: 4px;
+		border: 1px solid var(--error-border);
+		background: transparent;
+		color: var(--error-color);
+		font-size: 12px;
+		cursor: pointer;
+	}
+
+	.details-btn:hover {
+		background: var(--error-border);
 	}
 
 	.dismiss-btn {
@@ -299,6 +374,21 @@
 		color: white;
 		font-size: 12px;
 		cursor: pointer;
+	}
+
+	.error-details {
+		margin: 10px 0 0;
+		padding: 10px;
+		background: var(--card-bg);
+		border: 1px solid var(--border-color);
+		border-radius: 6px;
+		font-size: 11px;
+		font-family: monospace;
+		color: var(--text-secondary);
+		white-space: pre-wrap;
+		word-break: break-word;
+		max-height: 200px;
+		overflow-y: auto;
 	}
 
 	.admin-hint {

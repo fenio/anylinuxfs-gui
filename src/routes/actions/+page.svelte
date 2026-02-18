@@ -534,12 +534,6 @@
 		margin-left: 16px;
 	}
 
-	.readonly-label {
-		font-size: 12px;
-		color: var(--text-secondary);
-		font-style: italic;
-	}
-
 	.btn-primary,
 	.btn-secondary,
 	.btn-danger {

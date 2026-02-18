@@ -9,8 +9,8 @@ export async function listDisks(useSudo: boolean = false): Promise<DiskListResul
 	return await invoke<DiskListResult>('list_disks', { useSudo });
 }
 
-export async function mountDisk(device: string, passphrase?: string, readOnly?: boolean): Promise<string> {
-	return await invoke<string>('mount_disk', { device, passphrase: passphrase || null, readOnly: readOnly || false });
+export async function mountDisk(device: string, passphrase?: string, readOnly?: boolean, extraOptions?: string): Promise<string> {
+	return await invoke<string>('mount_disk', { device, passphrase: passphrase || null, readOnly: readOnly || false, extraOptions: extraOptions || null });
 }
 
 export async function unmountDisk(): Promise<string> {

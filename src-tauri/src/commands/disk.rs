@@ -492,9 +492,17 @@ fn parse_type_and_name(parts: &[&str]) -> (String, Option<String>) {
 }
 
 #[tauri::command]
-pub async fn mount_disk(app: AppHandle, device: String, passphrase: Option<String>, read_only: Option<bool>) -> Result<String, String> {
+pub async fn mount_disk(app: AppHandle, device: String, passphrase: Option<String>, read_only: Option<bool>, extra_options: Option<String>) -> Result<String, String> {
     // Validate device path before use
     validate_device_path(&device)?;
+
+    // Sanitize extra_options to prevent command injection
+    if let Some(ref opts) = extra_options {
+        let forbidden = [';', '|', '&', '`', '$', '(', ')', '\n', '\r'];
+        if opts.chars().any(|c| forbidden.contains(&c)) {
+            return Err("Mount options contain invalid characters".to_string());
+        }
+    }
 
     // Run in blocking task with timeout to avoid freezing UI
     let mount_future = tokio::task::spawn_blocking(move || {
@@ -504,19 +512,32 @@ pub async fn mount_disk(app: AppHandle, device: String, passphrase: Option<Strin
         let pass_ref = Some(effective_passphrase.as_str());
         let ro = read_only.unwrap_or(false);
 
+        // Build combined mount options string
+        let mut opts = Vec::new();
+        if ro {
+            opts.push("ro".to_string());
+        }
+        if let Some(ref extra) = extra_options {
+            let trimmed = extra.trim();
+            if !trimmed.is_empty() {
+                opts.push(trimmed.to_string());
+            }
+        }
+        let combined_options = if opts.is_empty() { None } else { Some(opts.join(",")) };
+
         // RAID/LVM: the device identifier IS the argument (e.g., anylinuxfs raid:disk10s1:disk11s1)
         // Normal: use explicit mount subcommand
         let result = if device.starts_with("raid:") || device.starts_with("lvm:") {
             let mut args: Vec<&str> = Vec::new();
-            if ro {
-                args.extend_from_slice(&["-o", "ro"]);
+            if let Some(ref combined) = combined_options {
+                args.extend_from_slice(&["-o", combined]);
             }
             args.push(&device);
             execute_command(&args, true, pass_ref)
         } else {
             let mut args: Vec<&str> = vec!["mount"];
-            if ro {
-                args.extend_from_slice(&["-o", "ro"]);
+            if let Some(ref combined) = combined_options {
+                args.extend_from_slice(&["-o", combined]);
             }
             args.push(&device);
             execute_command(&args, true, pass_ref)
