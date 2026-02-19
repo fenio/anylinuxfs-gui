@@ -10,6 +10,7 @@
     "core:event:default",
     "core:event:allow-emit",
     "core:event:allow-listen",
-    "log:default"
+    "log:default",
+    "shell:allow-open"
   ]
 }
