@@ -17,9 +17,8 @@ A macOS GUI application for [anylinuxfs](https://github.com/nohajc/anylinuxfs) -
 - **Native macOS** - Light/dark mode support, Apple Silicon optimized
 
 ## Screenshots
-
-<img width="1131" height="912" alt="image" src="https://github.com/user-attachments/assets/847d7359-7820-4d50-a915-9568e2b57e83" />
-<img width="1131" height="912" alt="image" src="https://github.com/user-attachments/assets/82aa0609-70c6-4d16-b8f9-c3b5504fafce" />
+<img width="1112" height="911" alt="image" src="https://github.com/user-attachments/assets/ee280b05-8c12-4f6d-8f68-46a06abd0ab1" />
+<img width="1112" height="911" alt="image" src="https://github.com/user-attachments/assets/75aea9e3-54ac-437e-ad66-6036f8a679ee" />
 <img width="1131" height="912" alt="image" src="https://github.com/user-attachments/assets/fabaea89-1416-4003-88fb-398f46982ede" />
 <img width="1131" height="912" alt="image" src="https://github.com/user-attachments/assets/87d6b7b6-19dd-4816-800d-a989e6c5db54" />
 <img width="1131" height="912" alt="image" src="https://github.com/user-attachments/assets/b3a7fa3b-8c19-43ff-b920-5521382fbc90" />
