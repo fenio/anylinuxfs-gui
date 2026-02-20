@@ -12,6 +12,9 @@ use tauri::Manager;
 use tauri::tray::TrayIconBuilder;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, AboutMetadataBuilder, SubmenuBuilder};
 use tauri_plugin_log::{Target, TargetKind};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+
+struct UnmountMenuItem(tauri::menu::MenuItem<tauri::Wry>);
 
 #[cfg(target_os = "macos")]
 fn set_dock_visible(visible: bool) {
@@ -40,6 +43,40 @@ use commands::{
     WatcherState, PtyState,
 };
 
+fn confirm_quit(app: &tauri::AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let is_mounted = tokio::task::spawn_blocking(|| {
+            commands::get_mount_status_sync()
+                .map(|info| info.mounted)
+                .unwrap_or(false)
+        })
+        .await
+        .unwrap_or(false);
+
+        if is_mounted {
+            let app_clone = app.clone();
+            app.dialog()
+                .message("A filesystem is currently mounted. Quitting will NOT unmount it automatically.\n\nAre you sure you want to quit?")
+                .title("Confirm Quit")
+                .kind(MessageDialogKind::Warning)
+                .buttons(MessageDialogButtons::OkCancelCustom("Quit".into(), "Cancel".into()))
+                .show(move |confirmed| {
+                    if confirmed {
+                        app_clone.exit(0);
+                    }
+                });
+        } else {
+            app.exit(0);
+        }
+    });
+}
+
+#[tauri::command]
+fn set_tray_unmount_enabled(state: tauri::State<'_, UnmountMenuItem>, enabled: bool) -> Result<(), String> {
+    state.0.set_enabled(enabled).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -51,6 +88,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
@@ -59,7 +97,10 @@ pub fn run() {
         .manage(Arc::new(Mutex::new(PtyState::default())))
         .setup(|app| {
             let show_item = MenuItemBuilder::with_id("show", "Show").build(app)?;
-            let unmount_item = MenuItemBuilder::with_id("unmount", "Unmount").build(app)?;
+            let unmount_item = MenuItemBuilder::with_id("unmount", "Unmount")
+                .enabled(false)
+                .build(app)?;
+            app.manage(UnmountMenuItem(unmount_item.clone()));
             let quit_item = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
             let menu = MenuBuilder::new(app)
                 .item(&show_item)
@@ -105,7 +146,7 @@ pub fn run() {
                             });
                         }
                         "quit" => {
-                            app.exit(0);
+                            confirm_quit(app);
                         }
                         _ => {}
                     }
@@ -113,6 +154,9 @@ pub fn run() {
                 .build(app)?;
 
             // App menu with keyboard shortcuts
+            let app_quit_item = MenuItemBuilder::with_id("app_quit", "Quit anylinuxfs")
+                .accelerator("CmdOrCtrl+Q")
+                .build(app)?;
             let app_menu = SubmenuBuilder::new(app, "anylinuxfs")
                 .about(Some(AboutMetadataBuilder::new().build()))
                 .separator()
@@ -120,7 +164,7 @@ pub fn run() {
                 .hide_others()
                 .show_all()
                 .separator()
-                .quit()
+                .item(&app_quit_item)
                 .build()?;
             let file_menu = SubmenuBuilder::new(app, "File")
                 .close_window()
@@ -131,13 +175,19 @@ pub fn run() {
                 .build()?;
             app.set_menu(menu)?;
             app.on_menu_event(move |app, event| {
-                if event.id() == "close" {
-                    // Cmd+W: hide to tray instead of closing
-                    if let Some(window) = app.get_webview_window("main") {
-                        let _ = window.hide();
-                        #[cfg(target_os = "macos")]
-                        set_dock_visible(false);
+                match event.id().as_ref() {
+                    "close" => {
+                        // Cmd+W: hide to tray instead of closing
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.hide();
+                            #[cfg(target_os = "macos")]
+                            set_dock_visible(false);
+                        }
                     }
+                    "app_quit" => {
+                        confirm_quit(app);
+                    }
+                    _ => {}
                 }
             });
 
@@ -194,6 +244,7 @@ pub fn run() {
             create_custom_action,
             update_custom_action,
             delete_custom_action,
+            set_tray_unmount_enabled,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

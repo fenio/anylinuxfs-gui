@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { status, isMounted } from '$lib/stores/status';
 	import { disks } from '$lib/stores/disks';
-	import { forceCleanup } from '$lib/api';
+	import { forceCleanup, setTrayUnmountEnabled } from '$lib/api';
 	import { Timeouts } from '$lib/constants';
 	import { logAction, logError } from '$lib/logger';
 	import { parseError } from '$lib/errors';
@@ -12,22 +12,27 @@
 	let error = $state<string | null>(null);
 
 	onMount(() => {
-		status.startPolling();
+		status.startListening();
 	});
 
 	onDestroy(() => {
-		status.stopPolling();
+		status.stopListening();
+	});
+
+	// Sync tray "Unmount" menu item enabled state with mount status
+	$effect(() => {
+		setTrayUnmountEnabled($isMounted).catch(() => {});
 	});
 
 	async function handleUnmount() {
 		unmounting = true;
-		status.stopPolling();
+		status.stopListening();
 		await disks.unmount();
 		// Wait for VM cleanup before checking status
 		await new Promise((r) => setTimeout(r, Timeouts.LOG_POLL_INTERVAL));
 		unmounting = false;
 		status.refresh();
-		status.startPolling();
+		status.startListening();
 	}
 
 	async function handleForceCleanup() {

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { listImages, installImage, uninstallImage, type VmImage } from '$lib/api';
+	import { wrapAsync, parseError } from '$lib/errors';
 
 	let images = $state<VmImage[]>([]);
 	let loading = $state(true);
@@ -10,10 +11,11 @@
 	async function loadImages() {
 		loading = true;
 		error = null;
-		try {
-			images = await listImages();
-		} catch (e) {
-			error = String(e);
+		const result = await wrapAsync(() => listImages());
+		if (result.ok) {
+			images = result.data;
+		} else {
+			error = result.error.message;
 		}
 		loading = false;
 	}
@@ -29,7 +31,7 @@
 			await installImage(name);
 			await loadImages();
 		} catch (e) {
-			error = String(e);
+			error = parseError(e).message;
 		}
 		processingImage = null;
 	}
@@ -41,7 +43,7 @@
 			await uninstallImage(name);
 			await loadImages();
 		} catch (e) {
-			error = String(e);
+			error = parseError(e).message;
 		}
 		processingImage = null;
 	}

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { listPackages, addPackages, removePackages } from '$lib/api';
+	import { wrapAsync, parseError } from '$lib/errors';
 
 	let packages = $state<string[]>([]);
 	let loading = $state(true);
@@ -12,10 +13,11 @@
 	async function loadPackages() {
 		loading = true;
 		error = null;
-		try {
-			packages = await listPackages();
-		} catch (e) {
-			error = String(e);
+		const result = await wrapAsync(() => listPackages());
+		if (result.ok) {
+			packages = result.data;
+		} else {
+			error = result.error.message;
 		}
 		loading = false;
 	}
@@ -39,7 +41,7 @@
 			newPackage = '';
 			await loadPackages();
 		} catch (e) {
-			error = String(e);
+			error = parseError(e).message;
 		}
 		processing = false;
 	}
@@ -51,7 +53,7 @@
 			await removePackages([pkg]);
 			await loadPackages();
 		} catch (e) {
-			error = String(e);
+			error = parseError(e).message;
 		}
 		removingPackage = null;
 	}

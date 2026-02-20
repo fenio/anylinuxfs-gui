@@ -16,6 +16,7 @@
     "autostart:allow-disable",
     "autostart:allow-is-enabled",
     "process:default",
-    "notification:default"
+    "notification:default",
+    "dialog:default"
   ]
 }

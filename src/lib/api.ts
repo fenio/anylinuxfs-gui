@@ -150,3 +150,7 @@ export async function updateCustomAction(action: Omit<CustomAction, 'is_upstream
 export async function deleteCustomAction(name: string): Promise<void> {
 	return await invoke<void>('delete_custom_action', { name });
 }
+
+export async function setTrayUnmountEnabled(enabled: boolean): Promise<void> {
+	return await invoke<void>('set_tray_unmount_enabled', { enabled });
+}

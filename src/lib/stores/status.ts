@@ -2,7 +2,7 @@ import { writable, derived } from 'svelte/store';
 import { listen } from '@tauri-apps/api/event';
 import type { MountInfo } from '../types';
 import { getMountStatus } from '../api';
-import { Events, Timeouts } from '../constants';
+import { Events } from '../constants';
 import { logError, logAction } from '../logger';
 import { parseError } from '../errors';
 
@@ -105,13 +105,6 @@ function createStatusStore() {
 				clearInterval(pollInterval);
 				pollInterval = null;
 			}
-		},
-		// Legacy methods for compatibility
-		startPolling(intervalMs: number = Timeouts.STATUS_POLL_INTERVAL) {
-			this.startListening();
-		},
-		stopPolling() {
-			this.stopListening();
 		}
 	};
 }

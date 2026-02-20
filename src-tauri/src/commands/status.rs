@@ -144,7 +144,7 @@ pub async fn get_mount_status() -> Result<MountInfo, String> {
         .map_err(|e| format!("Task error: {}", e))?
 }
 
-fn get_mount_status_sync() -> Result<MountInfo, String> {
+pub fn get_mount_status_sync() -> Result<MountInfo, String> {
     // First, try the socket approach
     if let Some(info) = try_socket_status() {
         return Ok(info);

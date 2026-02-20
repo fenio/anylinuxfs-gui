@@ -6,6 +6,7 @@
 	import { startShell, writeShell, resizeShell, stopShell, getMountStatus, listImages, type VmImage } from '$lib/api';
 	import { Events } from '$lib/constants';
 	import { logAction, logError } from '$lib/logger';
+	import { parseError } from '$lib/errors';
 	import '@xterm/xterm/css/xterm.css';
 
 	let terminalEl: HTMLDivElement;
@@ -150,7 +151,7 @@
 			}
 		} catch (e) {
 			logError('shell.start', e);
-			error = String(e);
+			error = parseError(e).message;
 			terminal?.writeln(`\x1b[31mError: ${error}\x1b[0m\r\n`);
 		}
 	}

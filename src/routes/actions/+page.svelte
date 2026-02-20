@@ -7,6 +7,7 @@
 		deleteCustomAction,
 		type CustomAction
 	} from '$lib/api';
+	import { wrapAsync, parseError } from '$lib/errors';
 
 	let actions = $state<CustomAction[]>([]);
 	let loading = $state(true);
@@ -30,10 +31,11 @@
 	async function loadActions() {
 		loading = true;
 		error = null;
-		try {
-			actions = await listCustomActions();
-		} catch (e) {
-			error = String(e);
+		const result = await wrapAsync(() => listCustomActions());
+		if (result.ok) {
+			actions = result.data;
+		} else {
+			error = result.error.message;
 		}
 		loading = false;
 	}
@@ -130,7 +132,7 @@
 			closeForm();
 			await loadActions();
 		} catch (e) {
-			error = String(e);
+			error = parseError(e).message;
 		}
 
 		formSubmitting = false;
@@ -155,7 +157,7 @@
 			await deleteCustomAction(name);
 			await loadActions();
 		} catch (e) {
-			error = String(e);
+			error = parseError(e).message;
 		}
 	}
 </script>

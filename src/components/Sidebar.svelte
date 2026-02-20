@@ -4,6 +4,7 @@
 	import { checkCli } from '$lib/api';
 	import { open } from '@tauri-apps/plugin-shell';
 	import { exit } from '@tauri-apps/plugin-process';
+	import { isMounted } from '$lib/stores/status';
 
 	const navItems = [
 		{ path: '/', label: 'Disks', icon: 'disk' },
@@ -54,7 +55,10 @@
 		{/each}
 	</ul>
 
-	<button class="quit-btn" onclick={() => exit(0)}>
+	<button class="quit-btn" onclick={() => {
+		if ($isMounted && !confirm('A filesystem is currently mounted. Quitting will NOT unmount it automatically.\n\nAre you sure you want to quit?')) return;
+		exit(0);
+	}}>
 		<span class="quit-icon"></span>
 		Quit
 	</button>
