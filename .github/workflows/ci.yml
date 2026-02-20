@@ -32,5 +32,8 @@ jobs:
       - name: Rust check
         run: cd src-tauri && cargo check
 
+      - name: Svelte sync
+        run: npx svelte-kit sync
+
       - name: Svelte check
         run: npx svelte-check
