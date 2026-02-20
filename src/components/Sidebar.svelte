@@ -13,7 +13,8 @@
 		{ path: '/packages', label: 'Packages', icon: 'package' },
 		{ path: '/actions', label: 'Actions', icon: 'action' },
 		{ path: '/logs', label: 'Logs', icon: 'log' },
-		{ path: '/settings', label: 'Settings', icon: 'settings' }
+		{ path: '/settings', label: 'Settings', icon: 'settings' },
+		{ path: '/preferences', label: 'Preferences', icon: 'preferences' }
 	];
 
 	let guiVersion = $state('');
@@ -190,6 +191,10 @@
 
 	.nav-icon[data-icon='action']::before {
 		content: '\26A1';
+	}
+
+	.nav-icon[data-icon='preferences']::before {
+		content: '\1F527';
 	}
 
 	.quit-btn {

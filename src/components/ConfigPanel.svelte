@@ -1,20 +1,16 @@
 <script lang="ts">
 	import { config } from '$lib/stores/config';
-	import { enable, disable, isEnabled } from '@tauri-apps/plugin-autostart';
 	import { onMount } from 'svelte';
 
 	let ramMb = $state(1024);
 	let vcpus = $state(1);
 	let logLevel = $state('off');
 	let hasChanges = $state(false);
-	let autoLaunch = $state(false);
-	let autoLaunchLoading = $state(false);
 
 	const logLevels = ['off', 'error', 'warn', 'info', 'debug', 'trace'];
 
-	onMount(async () => {
+	onMount(() => {
 		config.load();
-		autoLaunch = await isEnabled();
 	});
 
 	$effect(() => {
@@ -55,21 +51,6 @@
 		hasChanges = false;
 	}
 
-	async function toggleAutoLaunch() {
-		autoLaunchLoading = true;
-		try {
-			if (autoLaunch) {
-				await disable();
-			} else {
-				await enable();
-			}
-			autoLaunch = await isEnabled();
-		} catch {
-			// Revert on failure
-			autoLaunch = !autoLaunch;
-		}
-		autoLaunchLoading = false;
-	}
 </script>
 
 <div class="config-panel">
@@ -140,24 +121,6 @@
 					</select>
 					<span class="hint">Higher verbosity generates more log output.</span>
 				</div>
-			</div>
-		</div>
-
-		<div class="setting-group">
-			<h3>General</h3>
-			<p class="description">Application behavior settings.</p>
-
-			<div class="setting">
-				<label class="toggle-row">
-					<input
-						type="checkbox"
-						checked={autoLaunch}
-						onchange={toggleAutoLaunch}
-						disabled={autoLaunchLoading}
-					/>
-					<span>Launch at login</span>
-				</label>
-				<span class="hint">Automatically start anylinuxfs when you log in.</span>
 			</div>
 		</div>
 
@@ -271,22 +234,6 @@
 		font-weight: 500;
 		color: var(--text-primary);
 		margin-bottom: 6px;
-	}
-
-	.toggle-row {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		cursor: pointer;
-		margin-bottom: 2px;
-	}
-
-	.toggle-row input {
-		cursor: pointer;
-	}
-
-	.toggle-row input:disabled {
-		cursor: not-allowed;
 	}
 
 	.setting input[type='number'],
