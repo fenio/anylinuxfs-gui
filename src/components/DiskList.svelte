@@ -161,7 +161,7 @@
 					<span class="error-message">{summary}</span>
 					<div class="error-actions">
 						{#if details}
-							<button class="details-btn" onclick={() => (showErrorDetails = !showErrorDetails)}>
+							<button class="details-btn" aria-expanded={showErrorDetails} onclick={() => (showErrorDetails = !showErrorDetails)}>
 								{showErrorDetails ? 'Less' : 'Details'}
 							</button>
 						{/if}
@@ -189,7 +189,7 @@
 	{/if}
 
 	{#if $disks.loading && $disks.disks.length === 0}
-		<div class="loading" role="status">
+		<div class="loading" role="status" aria-busy="true">
 			<span class="spinner large" aria-hidden="true"></span>
 			<span>Scanning disks...</span>
 		</div>
@@ -497,8 +497,8 @@
 	}
 
 	.type-badge.lvm {
-		background: rgba(175, 82, 222, 0.12);
-		color: #af52de;
+		background: var(--lvm-bg);
+		color: var(--lvm-color);
 	}
 
 	.disk-model {

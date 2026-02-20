@@ -51,6 +51,9 @@
 
 	--badge-bg: rgba(0, 0, 0, 0.06);
 
+	--lvm-bg: rgba(175, 82, 222, 0.12);
+	--lvm-color: #af52de;
+
 	--button-secondary-bg: #ffffff;
 	--button-secondary-hover: #f5f5f7;
 
@@ -106,6 +109,9 @@
 		--hover-bg: rgba(255, 255, 255, 0.1);
 
 		--badge-bg: rgba(255, 255, 255, 0.1);
+
+		--lvm-bg: rgba(175, 82, 222, 0.2);
+		--lvm-color: #c084fc;
 
 		--button-secondary-bg: #3a3a3c;
 		--button-secondary-hover: #48484a;

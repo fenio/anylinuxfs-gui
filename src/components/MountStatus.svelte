@@ -88,7 +88,7 @@
 	</div>
 {:else if $disks.mountingDevice}
 	<div class="mount-status mounting">
-		<div class="status-icon" role="status">
+		<div class="status-icon" role="status" aria-busy="true">
 			<span class="spinner" aria-hidden="true"></span>
 			<span class="sr-only">Loading</span>
 		</div>

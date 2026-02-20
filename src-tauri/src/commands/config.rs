@@ -40,7 +40,8 @@ where
                 2 => "warn",
                 3 => "info",
                 4 => "debug",
-                5 | _ => "trace",
+                5 => "trace",
+                _ => return Err(D::Error::custom(format!("invalid numeric log level: {}. Expected 0-5 (off=0, error=1, warn=2, info=3, debug=4, trace=5)", i))),
             };
             Ok(Some(level.to_string()))
         }
