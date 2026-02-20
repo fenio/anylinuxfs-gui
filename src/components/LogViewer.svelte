@@ -90,7 +90,7 @@
 	</div>
 
 	{#if $logs.error}
-		<div class="error-banner">
+		<div class="error-banner" role="alert">
 			<span>{$logs.error}</span>
 		</div>
 	{/if}

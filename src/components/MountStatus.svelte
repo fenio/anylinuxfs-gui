@@ -56,7 +56,8 @@
 {#if $isMounted}
 	<div class="mount-status mounted">
 		<div class="status-icon">
-			<span class="icon-mounted"></span>
+			<span class="icon-mounted" aria-hidden="true"></span>
+			<span class="sr-only">Success</span>
 		</div>
 		<div class="status-info">
 			<div class="status-label">Mounted</div>
@@ -82,8 +83,9 @@
 	</div>
 {:else if $disks.mountingDevice}
 	<div class="mount-status mounting">
-		<div class="status-icon">
-			<span class="spinner"></span>
+		<div class="status-icon" role="status">
+			<span class="spinner" aria-hidden="true"></span>
+			<span class="sr-only">Loading</span>
 		</div>
 		<div class="status-info">
 			<div class="status-label">
@@ -99,7 +101,8 @@
 {:else if $status.info.orphaned_instance && !$disks.recentUnmount}
 	<div class="mount-status orphaned">
 		<div class="status-icon">
-			<span class="icon-warning"></span>
+			<span class="icon-warning" aria-hidden="true"></span>
+			<span class="sr-only">Warning</span>
 		</div>
 		<div class="status-info">
 			<div class="status-label">Orphaned instance detected</div>
@@ -287,5 +290,17 @@
 		to {
 			transform: rotate(360deg);
 		}
+	}
+
+	.sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip: rect(0, 0, 0, 0);
+		white-space: nowrap;
+		border-width: 0;
 	}
 </style>

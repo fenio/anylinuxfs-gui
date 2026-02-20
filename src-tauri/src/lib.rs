@@ -10,7 +10,7 @@ pub use paths::{get_socket_path, get_log_path, COMMAND_TIMEOUT_SECS, MOUNT_TIMEO
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
 use tauri::tray::TrayIconBuilder;
-use tauri::menu::{MenuBuilder, MenuItemBuilder};
+use tauri::menu::{MenuBuilder, MenuItemBuilder, AboutMetadataBuilder, SubmenuBuilder};
 use tauri_plugin_log::{Target, TargetKind};
 
 #[cfg(target_os = "macos")]
@@ -50,6 +50,7 @@ pub fn run() {
         ]).build())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
@@ -110,6 +111,35 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
+
+            // App menu with keyboard shortcuts
+            let app_menu = SubmenuBuilder::new(app, "anylinuxfs")
+                .about(Some(AboutMetadataBuilder::new().build()))
+                .separator()
+                .hide()
+                .hide_others()
+                .show_all()
+                .separator()
+                .quit()
+                .build()?;
+            let file_menu = SubmenuBuilder::new(app, "File")
+                .close_window()
+                .build()?;
+            let menu = MenuBuilder::new(app)
+                .item(&app_menu)
+                .item(&file_menu)
+                .build()?;
+            app.set_menu(menu)?;
+            app.on_menu_event(move |app, event| {
+                if event.id() == "close" {
+                    // Cmd+W: hide to tray instead of closing
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.hide();
+                        #[cfg(target_os = "macos")]
+                        set_dock_visible(false);
+                    }
+                }
+            });
 
             Ok(())
         })

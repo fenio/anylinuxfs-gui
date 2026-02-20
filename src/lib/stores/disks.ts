@@ -2,7 +2,7 @@ import { writable, derived, get } from 'svelte/store';
 import type { Disk, DiskListResult } from '../types';
 import { listDisks, mountDisk, unmountDisk } from '../api';
 import { Timeouts, validateDevicePath } from '../constants';
-import { logAction, logError } from '../logger';
+import { logAction, logError, notifyIfHidden } from '../logger';
 import { parseError } from '../errors';
 
 interface DisksState {
@@ -74,6 +74,7 @@ function createDisksStore() {
 				await mountDisk(device, passphrase, readOnly, extraOptions);
 				logAction('Mount completed', { device });
 				update((s) => ({ ...s, mountingDevice: null }));
+				notifyIfHidden('Mount Complete', `${device} mounted successfully.`);
 				return 'success';
 			} catch (e) {
 				const rawError = String(e);
@@ -87,6 +88,7 @@ function createDisksStore() {
 
 				logError('mount', e);
 				const errorMessage = parseError(e).message;
+				notifyIfHidden('Mount Failed', errorMessage);
 				// Don't show error if:
 				// - Unmount was requested while mounting
 				// - Mount was already detected as successful (mountingDevice was cleared)
@@ -114,6 +116,7 @@ function createDisksStore() {
 				await new Promise((r) => setTimeout(r, Timeouts.UNMOUNT_CLEANUP_DELAY));
 				logAction('Unmount completed');
 				update((s) => ({ ...s, mountingDevice: null }));
+				notifyIfHidden('Unmount Complete', 'Filesystem unmounted successfully.');
 				// Clear recentUnmount after timeout
 				unmountTimeout = setTimeout(() => {
 					update((s) => ({ ...s, recentUnmount: false }));
@@ -121,7 +124,9 @@ function createDisksStore() {
 				return true;
 			} catch (e) {
 				logError('unmount', e);
-				update((s) => ({ ...s, error: parseError(e).message, mountingDevice: null }));
+				const errorMessage = parseError(e).message;
+				notifyIfHidden('Unmount Failed', errorMessage);
+				update((s) => ({ ...s, error: errorMessage, mountingDevice: null }));
 				unmountTimeout = setTimeout(() => {
 					update((s) => ({ ...s, recentUnmount: false }));
 				}, Timeouts.RECENT_UNMOUNT_CLEAR);

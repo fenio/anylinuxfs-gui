@@ -171,7 +171,7 @@
 	</div>
 
 	{#if error}
-		<div class="error-banner">
+		<div class="error-banner" role="alert">
 			<span>{error}</span>
 			<button onclick={() => (error = null)}>Dismiss</button>
 		</div>

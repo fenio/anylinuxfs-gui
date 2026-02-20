@@ -78,7 +78,7 @@
 	</div>
 
 	{#if $config.error}
-		<div class="error-banner">
+		<div class="error-banner" role="alert">
 			<span>{$config.error}</span>
 			<button onclick={() => config.clearError()}>Dismiss</button>
 		</div>

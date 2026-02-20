@@ -45,6 +45,7 @@
 					href={item.path}
 					class="nav-item"
 					class:active={isActive(item.path, $page.url.pathname)}
+					aria-current={isActive(item.path, $page.url.pathname) ? 'page' : undefined}
 				>
 					<span class="nav-icon" data-icon={item.icon}></span>
 					<span class="nav-label">{item.label}</span>

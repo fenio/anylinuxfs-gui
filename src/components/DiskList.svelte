@@ -149,7 +149,7 @@
 
 	{#if $disks.error}
 		{@const { summary, details } = summarizeError($disks.error)}
-		<div class="error-banner">
+		<div class="error-banner" role="alert">
 			<span class="error-icon">!</span>
 			<div class="error-content">
 				<div class="error-top">
@@ -184,8 +184,8 @@
 	{/if}
 
 	{#if $disks.loading && $disks.disks.length === 0}
-		<div class="loading">
-			<span class="spinner large"></span>
+		<div class="loading" role="status">
+			<span class="spinner large" aria-hidden="true"></span>
 			<span>Scanning disks...</span>
 		</div>
 	{:else if $disks.disks.length === 0}
