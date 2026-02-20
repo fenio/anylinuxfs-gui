@@ -1,6 +1,7 @@
 import { writable } from 'svelte/store';
 import type { AppConfig } from '../types';
 import { getConfig, updateConfig } from '../api';
+import { parseError } from '../errors';
 
 interface ConfigState {
 	config: AppConfig;
@@ -31,7 +32,7 @@ function createConfigStore() {
 				const config = await getConfig();
 				update((s) => ({ ...s, config, loading: false }));
 			} catch (e) {
-				update((s) => ({ ...s, error: String(e), loading: false }));
+				update((s) => ({ ...s, error: parseError(e).message, loading: false }));
 			}
 		},
 		async save(ramMb?: number, vcpus?: number, logLevel?: string) {
@@ -43,7 +44,7 @@ function createConfigStore() {
 				update((s) => ({ ...s, config, saving: false }));
 				return true;
 			} catch (e) {
-				update((s) => ({ ...s, error: String(e), saving: false }));
+				update((s) => ({ ...s, error: parseError(e).message, saving: false }));
 				return false;
 			}
 		},

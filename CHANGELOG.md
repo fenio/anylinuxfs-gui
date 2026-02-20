@@ -2,6 +2,106 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.1] - 2026-02-18
+
+### Added
+- Extra mount options with split button UI and quick-chip buttons (noatime, nodiratime, nobarrier, compress-force)
+- Collapsible error details for mount failures
+
+## [0.5.0] - 2026-02-15
+
+### Added
+- Read-only mount option with RO checkbox on disk cards
+
+### Changed
+- Improved passphrase clearing, operation rate limiting, and graceful shutdown
+- Optimized diskutil batching for faster disk detection
+
+## [0.4.7] - 2026-02-13
+
+### Changed
+- Simplified sudo auth: try native PAM first (handles Touch ID), fall back to askpass dialog
+
+## [0.4.6] - 2026-02-13
+
+### Fixed
+- Preserve ALFS_PASSPHRASE through sudo for encrypted volume mounting
+
+## [0.4.5] - 2026-02-13
+
+### Changed
+- Improved RAID, LVM, and LUKS handling with better detection and error messages
+
+## [0.4.0] - 2026-02-12
+
+### Added
+- RAID and LVM volume support in GUI (visible in admin mode)
+
+### Fixed
+- Svelte-check errors in shell and actions pages
+
+## [0.3.4] - 2026-02-10
+
+### Added
+- Reinit-pending banner when VM image update is needed after CLI upgrade
+
+## [0.3.3] - 2026-02-09
+
+### Changed
+- Updated adapter-static and dependencies
+
+### Fixed
+- Fetch full git history for changelog generation in CI
+
+## [0.3.2] - 2026-02-01
+
+### Fixed
+- Use dynamic image list for shell dropdown instead of hardcoded values
+- Use cargo install for git-cliff on macOS CI runner
+
+### Changed
+- Removed list command merging workaround
+
+## [0.3.1] - 2026-01-29
+
+### Added
+- GUI and CLI version display in sidebar
+- Automated changelog generation with git-cliff
+
+### Fixed
+- Improved cache cleanup, error sanitization, and log batching
+- Added input validation and improved error handling
+- Use piped stdin instead of null for command execution
+- Security hardening for temp files, device validation, and cache
+
+## [0.3.0] - 2026-01-29
+
+### Added
+- Push events for real-time status updates (reduced polling)
+- Virtualized log viewer with follow mode
+- Typed error handling module
+- Frontend logging via tauri-plugin-log
+- Constants module for timeouts, limits, and event names
+
+### Changed
+- Performance optimizations for disk listing and status checks
+- Command result caching with TTL-based eviction
+- Fixed hardcoded colors to use CSS custom properties
+
+### Security
+- Added Content Security Policy improvements
+
+## [0.2.0] - 2026-01-28
+
+### Added
+- Custom actions management page (create, edit, delete mount/unmount hooks)
+- VM image selector on Shell page (Alpine/FreeBSD)
+
+### Changed
+- Eject button now only shown for external drives
+- Unmount before eject for safer disk removal
+- Shell no longer auto-starts when navigating to Shell page
+
 ## [0.1.8] - 2025-01-27
 
 ### Added

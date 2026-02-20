@@ -3,6 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import { getLogContent, startLogStream } from '../api';
 import { Events, Limits } from '../constants';
 import { logError } from '../logger';
+import { parseError } from '../errors';
 
 // Pre-computed log line with flags
 export interface LogLine {
@@ -47,7 +48,7 @@ function createLogsStore() {
 				update((s) => ({ ...s, lines, loading: false }));
 			} catch (e) {
 				logError('logs.load', e);
-				update((s) => ({ ...s, error: String(e), loading: false }));
+				update((s) => ({ ...s, error: parseError(e).message, loading: false }));
 			}
 		},
 		async startStreaming() {
@@ -71,7 +72,7 @@ function createLogsStore() {
 				});
 			} catch (e) {
 				logError('logs.startStreaming', e);
-				update((s) => ({ ...s, error: String(e) }));
+				update((s) => ({ ...s, error: parseError(e).message }));
 			}
 		},
 		stopStreaming() {

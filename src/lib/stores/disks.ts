@@ -3,6 +3,7 @@ import type { Disk, DiskListResult } from '../types';
 import { listDisks, mountDisk, unmountDisk } from '../api';
 import { Timeouts, validateDevicePath } from '../constants';
 import { logAction, logError } from '../logger';
+import { parseError } from '../errors';
 
 interface DisksState {
 	disks: Disk[];
@@ -46,7 +47,7 @@ function createDisksStore() {
 					loading: false
 				}));
 			} catch (e) {
-				update((s) => ({ ...s, error: String(e), loading: false }));
+				update((s) => ({ ...s, error: parseError(e).message, loading: false }));
 			}
 		},
 		setAdminMode(enabled: boolean) {
@@ -75,23 +76,24 @@ function createDisksStore() {
 				update((s) => ({ ...s, mountingDevice: null }));
 				return 'success';
 			} catch (e) {
-				const errorStr = String(e);
+				const rawError = String(e);
 
 				// Detect encryption-required error from backend
-				if (errorStr.includes('ENCRYPTION_REQUIRED')) {
+				if (rawError.includes('ENCRYPTION_REQUIRED')) {
 					logAction('Encryption detected, passphrase needed', { device });
 					update((s) => ({ ...s, mountingDevice: null }));
 					return 'encryption_required';
 				}
 
 				logError('mount', e);
+				const errorMessage = parseError(e).message;
 				// Don't show error if:
 				// - Unmount was requested while mounting
 				// - Mount was already detected as successful (mountingDevice was cleared)
 				// - A different mount operation started
 				update((s) => ({
 					...s,
-					error: (s.recentUnmount || s.mountingDevice === null || s.currentMountId !== mountId) ? null : errorStr,
+					error: (s.recentUnmount || s.mountingDevice === null || s.currentMountId !== mountId) ? null : errorMessage,
 					mountingDevice: s.currentMountId === mountId ? null : s.mountingDevice
 				}));
 				return 'error';
@@ -119,7 +121,7 @@ function createDisksStore() {
 				return true;
 			} catch (e) {
 				logError('unmount', e);
-				update((s) => ({ ...s, error: String(e), mountingDevice: null }));
+				update((s) => ({ ...s, error: parseError(e).message, mountingDevice: null }));
 				unmountTimeout = setTimeout(() => {
 					update((s) => ({ ...s, recentUnmount: false }));
 				}, Timeouts.RECENT_UNMOUNT_CLEAR);

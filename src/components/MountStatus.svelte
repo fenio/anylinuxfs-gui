@@ -4,10 +4,12 @@
 	import { forceCleanup } from '$lib/api';
 	import { Timeouts } from '$lib/constants';
 	import { logAction, logError } from '$lib/logger';
+	import { parseError } from '$lib/errors';
 	import { onMount, onDestroy } from 'svelte';
 
 	let unmounting = $state(false);
 	let cleaning = $state(false);
+	let error = $state<string | null>(null);
 
 	onMount(() => {
 		status.startPolling();
@@ -30,17 +32,26 @@
 
 	async function handleForceCleanup() {
 		cleaning = true;
+		error = null;
 		try {
 			logAction('Force cleanup started');
 			await forceCleanup();
 			logAction('Force cleanup completed');
 		} catch (e) {
 			logError('forceCleanup', e);
+			error = parseError(e).message;
 		}
 		cleaning = false;
 		status.refresh();
 	}
 </script>
+
+{#if error}
+	<div class="cleanup-error" role="alert">
+		<span class="error-message">Force cleanup failed: {error}</span>
+		<button class="dismiss-btn" onclick={() => (error = null)}>Dismiss</button>
+	</div>
+{/if}
 
 {#if $isMounted}
 	<div class="mount-status mounted">
@@ -116,6 +127,34 @@
 {/if}
 
 <style>
+	.cleanup-error {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 10px 16px;
+		background: var(--error-bg);
+		border: 1px solid var(--error-border);
+		border-radius: 8px;
+		margin-bottom: 8px;
+	}
+
+	.cleanup-error .error-message {
+		flex: 1;
+		font-size: 13px;
+		color: var(--error-color);
+	}
+
+	.cleanup-error .dismiss-btn {
+		padding: 4px 10px;
+		border-radius: 4px;
+		border: none;
+		background: var(--error-color);
+		color: white;
+		font-size: 12px;
+		cursor: pointer;
+		flex-shrink: 0;
+	}
+
 	.mount-status {
 		display: flex;
 		align-items: center;

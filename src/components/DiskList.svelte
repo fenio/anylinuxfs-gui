@@ -38,6 +38,7 @@
 	let passphraseDevice: string | null = $state(null);
 	let passphraseReadOnly = $state(false);
 	let passphraseExtraOptions = $state('');
+	let passphraseError: string | null = $state(null);
 	let submittingPassphrase = $state(false);
 
 	onMount(() => {
@@ -67,6 +68,7 @@
 		passphraseDevice = device;
 		passphraseReadOnly = readOnly;
 		passphraseExtraOptions = extraOptions;
+		passphraseError = null;
 	}
 
 	async function handlePassphraseSubmit(passphrase: string) {
@@ -81,8 +83,9 @@
 			if (result === 'success') {
 				status.refresh();
 			} else if (result === 'encryption_required') {
-				// Wrong passphrase — re-show dialog
+				// Wrong passphrase — re-show dialog with error
 				passphraseDevice = device;
+				passphraseError = 'Incorrect passphrase. Please try again.';
 			}
 		} finally {
 			submittingPassphrase = false;
@@ -91,6 +94,7 @@
 
 	function handlePassphraseCancel() {
 		passphraseDevice = null;
+		passphraseError = null;
 	}
 
 	function handleRefresh() {
@@ -232,6 +236,7 @@
 {#if passphraseDevice}
 	<PassphraseDialog
 		device={passphraseDevice}
+		errorMessage={passphraseError}
 		onSubmit={handlePassphraseSubmit}
 		onCancel={handlePassphraseCancel}
 	/>

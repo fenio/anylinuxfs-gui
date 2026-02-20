@@ -1,11 +1,12 @@
 <script lang="ts">
 	interface Props {
 		device: string;
+		errorMessage?: string | null;
 		onSubmit: (passphrase: string) => void;
 		onCancel: () => void;
 	}
 
-	let { device, onSubmit, onCancel }: Props = $props();
+	let { device, errorMessage = null, onSubmit, onCancel }: Props = $props();
 
 	let passphrase = $state('');
 	let showPassphrase = $state(false);
@@ -49,6 +50,9 @@
 			<p class="device-info">
 				The partition <code>{device}</code> is encrypted.
 			</p>
+			{#if errorMessage}
+				<p class="passphrase-error" role="alert">{errorMessage}</p>
+			{/if}
 			<form onsubmit={handleSubmit}>
 				<label for="passphrase">Passphrase</label>
 				<div class="input-wrapper">
@@ -125,6 +129,16 @@
 		margin: 0 0 16px;
 		font-size: 14px;
 		color: var(--text-secondary);
+	}
+
+	.passphrase-error {
+		margin: 0 0 12px;
+		padding: 8px 12px;
+		font-size: 13px;
+		color: var(--error-color);
+		background: var(--error-bg);
+		border: 1px solid var(--error-border);
+		border-radius: 6px;
 	}
 
 	.device-info code {

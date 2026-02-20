@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import { checkCli } from '$lib/api';
 	import { open } from '@tauri-apps/plugin-shell';
+	import { exit } from '@tauri-apps/plugin-process';
 
 	const navItems = [
 		{ path: '/', label: 'Disks', icon: 'disk' },
@@ -51,6 +52,11 @@
 			</li>
 		{/each}
 	</ul>
+
+	<button class="quit-btn" onclick={() => exit(0)}>
+		<span class="quit-icon"></span>
+		Quit
+	</button>
 
 	<button
 		class="github-link"
@@ -179,6 +185,37 @@
 
 	.nav-icon[data-icon='action']::before {
 		content: '\26A1';
+	}
+
+	.quit-btn {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		margin: 40px 8px 0;
+		padding: 8px 12px;
+		border-radius: 6px;
+		border: none;
+		background: none;
+		color: var(--text-secondary);
+		font-size: 13px;
+		cursor: pointer;
+		-webkit-app-region: no-drag;
+		transition: background-color 0.15s, color 0.15s;
+	}
+
+	.quit-btn:hover {
+		background: var(--hover-bg);
+		color: var(--error-color);
+	}
+
+	.quit-icon::before {
+		content: '\23FB';
+		font-size: 18px;
+		display: flex;
+		width: 20px;
+		height: 20px;
+		align-items: center;
+		justify-content: center;
 	}
 
 	.github-link {

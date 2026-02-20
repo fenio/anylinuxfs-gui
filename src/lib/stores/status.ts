@@ -4,6 +4,7 @@ import type { MountInfo } from '../types';
 import { getMountStatus } from '../api';
 import { Events, Timeouts } from '../constants';
 import { logError, logAction } from '../logger';
+import { parseError } from '../errors';
 
 interface StatusState {
 	info: MountInfo;
@@ -49,7 +50,7 @@ function createStatusStore() {
 			update((s) => ({ ...s, info, loading: false, error: null }));
 		} catch (e) {
 			logError('status.refresh', e);
-			update((s) => ({ ...s, error: String(e), loading: false }));
+			update((s) => ({ ...s, error: parseError(e).message, loading: false }));
 		} finally {
 			refreshInProgress = false;
 		}
