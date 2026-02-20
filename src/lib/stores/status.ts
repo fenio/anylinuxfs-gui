@@ -97,6 +97,10 @@ function createStatusStore() {
 			pollInterval = setInterval(() => this.refresh(), FALLBACK_POLL_INTERVAL);
 		},
 		stopListening() {
+			if (debounceTimeout) {
+				clearTimeout(debounceTimeout);
+				debounceTimeout = null;
+			}
 			if (unlisten) {
 				unlisten();
 				unlisten = null;

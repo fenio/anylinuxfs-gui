@@ -2,11 +2,12 @@
 	interface Props {
 		device: string;
 		errorMessage?: string | null;
+		submitting?: boolean;
 		onSubmit: (passphrase: string) => void;
 		onCancel: () => void;
 	}
 
-	let { device, errorMessage = null, onSubmit, onCancel }: Props = $props();
+	let { device, errorMessage = null, submitting = false, onSubmit, onCancel }: Props = $props();
 
 	let passphrase = $state('');
 	let showPassphrase = $state(false);
@@ -20,11 +21,8 @@
 
 	function handleSubmit(e: Event) {
 		e.preventDefault();
-		if (passphrase.trim()) {
-			const value = passphrase;
-			passphrase = '';
-			showPassphrase = false;
-			onSubmit(value);
+		if (passphrase.trim() && !submitting) {
+			onSubmit(passphrase);
 		}
 	}
 
@@ -65,6 +63,7 @@
 						autocomplete="off"
 						autocorrect="off"
 						spellcheck="false"
+						disabled={submitting}
 					/>
 					<button
 						type="button"
@@ -78,13 +77,13 @@
 			</form>
 		</div>
 		<div class="dialog-footer">
-			<button class="btn-secondary" onclick={handleCancel}>Cancel</button>
+			<button class="btn-secondary" onclick={handleCancel} disabled={submitting}>Cancel</button>
 			<button
 				class="btn-primary"
 				onclick={handleSubmit}
-				disabled={!passphrase.trim()}
+				disabled={!passphrase.trim() || submitting}
 			>
-				Mount
+				{submitting ? 'Mounting...' : 'Mount'}
 			</button>
 		</div>
 	</div>

@@ -138,6 +138,12 @@ function createDisksStore() {
 		},
 		clearMounting() {
 			update((s) => ({ ...s, mountingDevice: null }));
+		},
+		cleanup() {
+			if (unmountTimeout) {
+				clearTimeout(unmountTimeout);
+				unmountTimeout = null;
+			}
 		}
 	};
 }

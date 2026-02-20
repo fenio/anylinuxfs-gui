@@ -54,6 +54,7 @@
 
 		return () => {
 			unlisten.then((fn) => fn());
+			disks.cleanup();
 		};
 	});
 
@@ -78,14 +79,18 @@
 			const device = passphraseDevice;
 			const ro = passphraseReadOnly;
 			const extra = passphraseExtraOptions;
-			passphraseDevice = null; // Close dialog while mounting
 			const result = await disks.mount(device, passphrase, ro, extra);
 			if (result === 'success') {
+				passphraseDevice = null;
+				passphraseError = null;
 				status.refresh();
 			} else if (result === 'encryption_required') {
-				// Wrong passphrase — re-show dialog with error
-				passphraseDevice = device;
+				// Wrong passphrase — keep dialog open with error
 				passphraseError = 'Incorrect passphrase. Please try again.';
+			} else {
+				// Other error — close dialog, error shown in main banner
+				passphraseDevice = null;
+				passphraseError = null;
 			}
 		} finally {
 			submittingPassphrase = false;
@@ -237,6 +242,7 @@
 	<PassphraseDialog
 		device={passphraseDevice}
 		errorMessage={passphraseError}
+		submitting={submittingPassphrase}
 		onSubmit={handlePassphraseSubmit}
 		onCancel={handlePassphraseCancel}
 	/>
