@@ -19,13 +19,21 @@ A macOS GUI application for [anylinuxfs](https://github.com/nohajc/anylinuxfs) -
 - **Native macOS** - Light/dark mode support, Apple Silicon optimized
 
 ## Screenshots
-<img width="1112" height="911" alt="image" src="https://github.com/user-attachments/assets/ee280b05-8c12-4f6d-8f68-46a06abd0ab1" />
-<img width="1112" height="911" alt="image" src="https://github.com/user-attachments/assets/75aea9e3-54ac-437e-ad66-6036f8a679ee" />
-<img width="1131" height="912" alt="image" src="https://github.com/user-attachments/assets/fabaea89-1416-4003-88fb-398f46982ede" />
-<img width="1131" height="912" alt="image" src="https://github.com/user-attachments/assets/87d6b7b6-19dd-4816-800d-a989e6c5db54" />
-<img width="1131" height="912" alt="image" src="https://github.com/user-attachments/assets/b3a7fa3b-8c19-43ff-b920-5521382fbc90" />
-<img width="1131" height="912" alt="image" src="https://github.com/user-attachments/assets/88f311d6-153d-480d-96f1-8fc6c713750b" />
-<img width="1131" height="912" alt="image" src="https://github.com/user-attachments/assets/1b2361d5-3f23-4fa0-96d3-ece11e4ec53c" />
+<img width="1117" height="991" alt="image" src="https://github.com/user-attachments/assets/9f2659cc-9bbb-481a-b1aa-9919fecda7a1" />
+<img width="1117" height="991" alt="image" src="https://github.com/user-attachments/assets/53085129-b895-412d-8ed8-2bd70f23671d" />
+<img width="1117" height="991" alt="image" src="https://github.com/user-attachments/assets/938f800b-c537-4021-96de-c08c1bbaff16" />
+<img width="1117" height="991" alt="image" src="https://github.com/user-attachments/assets/cbff7630-9e00-4ffc-ae42-9986824a58b1" />
+<img width="1117" height="991" alt="image" src="https://github.com/user-attachments/assets/825d9319-82d7-4568-9af6-48f1a421251c" />
+<img width="1117" height="991" alt="image" src="https://github.com/user-attachments/assets/9da79c72-722e-44db-bd15-9e99f9e2e35a" />
+<img width="1117" height="991" alt="image" src="https://github.com/user-attachments/assets/e92fa573-f4e8-4836-a697-42f8350a1ada" />
+
+<img width="1117" height="991" alt="image" src="https://github.com/user-attachments/assets/f8457756-b829-4ed6-b2fc-a11d57218444" />
+<img width="1117" height="991" alt="image" src="https://github.com/user-attachments/assets/04f3c527-9c1f-4d15-8808-dc949972b085" />
+<img width="1117" height="991" alt="image" src="https://github.com/user-attachments/assets/713c142b-3e19-4c17-b3de-c124e60c6ea3" />
+<img width="1117" height="991" alt="image" src="https://github.com/user-attachments/assets/9e3d1839-fc8e-405e-8799-2049bb882bc5" />
+<img width="1117" height="991" alt="image" src="https://github.com/user-attachments/assets/2a224724-b53d-4f2f-964c-c834197d7adc" />
+<img width="1117" height="991" alt="image" src="https://github.com/user-attachments/assets/9a3ea976-f2e1-4c7c-9f53-7b9cb6b430f2" />
+<img width="1117" height="991" alt="image" src="https://github.com/user-attachments/assets/99e276d4-217e-476b-84c4-dfb45ed8ae53" />
 
 
 ## Requirements
