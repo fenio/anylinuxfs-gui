@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="static/anylinuxfs.png" width="128" height="128" alt="anylinuxfs GUI icon" />
+  <img src="logo.jpg" alt="anylinuxfs GUI" />
 </p>
 
 # anylinuxfs GUI
