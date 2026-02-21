@@ -1,11 +1,11 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "anylinuxfs-gui",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "identifier": "com.anylinuxfs.gui",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "devUrl": "http://localhost:5173",
+    "devUrl": "http://localhost:2137",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../build"
   },

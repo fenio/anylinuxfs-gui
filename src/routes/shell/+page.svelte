@@ -224,17 +224,7 @@
 	}
 
 	.header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
 		margin-bottom: 16px;
-	}
-
-	.header h2 {
-		font-size: 18px;
-		font-weight: 600;
-		color: var(--text-primary);
-		margin: 0;
 	}
 
 	.actions {
@@ -282,58 +272,6 @@
 
 	.image-select:hover {
 		background: var(--button-secondary-hover);
-	}
-
-	.btn-primary,
-	.btn-secondary {
-		padding: 6px 14px;
-		border-radius: 6px;
-		font-size: 13px;
-		font-weight: 500;
-		cursor: pointer;
-	}
-
-	.btn-primary {
-		border: none;
-		background: var(--accent-color);
-		color: white;
-	}
-
-	.btn-primary:hover {
-		background: var(--accent-hover);
-	}
-
-	.btn-secondary {
-		border: 1px solid var(--border-color);
-		background: var(--button-secondary-bg);
-		color: var(--text-primary);
-	}
-
-	.btn-secondary:hover {
-		background: var(--button-secondary-hover);
-	}
-
-	.error-banner {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 10px 14px;
-		background: var(--error-bg);
-		border: 1px solid var(--error-border);
-		border-radius: 6px;
-		color: var(--error-color);
-		font-size: 13px;
-		margin-bottom: 16px;
-	}
-
-	.error-banner button {
-		padding: 4px 10px;
-		border-radius: 4px;
-		border: none;
-		background: var(--error-color);
-		color: white;
-		font-size: 12px;
-		cursor: pointer;
 	}
 
 	.terminal-container {

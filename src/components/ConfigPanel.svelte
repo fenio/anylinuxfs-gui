@@ -154,78 +154,9 @@
 		flex-direction: column;
 	}
 
-	.header {
-		margin-bottom: 20px;
-	}
-
-	.header h2 {
-		font-size: 18px;
-		font-weight: 600;
-		color: var(--text-primary);
-		margin: 0;
-	}
-
-	.error-banner {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 10px 14px;
-		background: var(--error-bg);
-		border: 1px solid var(--error-border);
-		border-radius: 6px;
-		color: var(--error-color);
-		font-size: 13px;
-		margin-bottom: 16px;
-	}
-
-	.error-banner button {
-		padding: 4px 10px;
-		border-radius: 4px;
-		border: none;
-		background: var(--error-color);
-		color: white;
-		font-size: 12px;
-		cursor: pointer;
-	}
-
-	.loading {
-		padding: 24px;
-		text-align: center;
-		color: var(--text-secondary);
-	}
-
 	.settings-grid {
 		flex: 1;
 		overflow-y: auto;
-	}
-
-	.setting-group {
-		background: var(--card-bg);
-		border: 1px solid var(--border-color);
-		border-radius: 8px;
-		padding: 20px;
-		margin-bottom: 16px;
-	}
-
-	.setting-group h3 {
-		font-size: 15px;
-		font-weight: 600;
-		color: var(--text-primary);
-		margin: 0 0 4px;
-	}
-
-	.setting-group .description {
-		font-size: 13px;
-		color: var(--text-secondary);
-		margin: 0 0 16px;
-	}
-
-	.setting {
-		margin-bottom: 16px;
-	}
-
-	.setting:last-child {
-		margin-bottom: 0;
 	}
 
 	.setting label {
@@ -276,13 +207,6 @@
 		white-space: nowrap;
 	}
 
-	.setting .hint {
-		display: block;
-		font-size: 12px;
-		color: var(--text-tertiary);
-		margin-top: 4px;
-	}
-
 	.actions {
 		display: flex;
 		justify-content: flex-end;
@@ -294,35 +218,5 @@
 	.btn-secondary,
 	.btn-primary {
 		padding: 8px 16px;
-		border-radius: 6px;
-		font-size: 13px;
-		font-weight: 500;
-		cursor: pointer;
-	}
-
-	.btn-secondary {
-		border: 1px solid var(--border-color);
-		background: var(--button-secondary-bg);
-		color: var(--text-primary);
-	}
-
-	.btn-secondary:hover:not(:disabled) {
-		background: var(--button-secondary-hover);
-	}
-
-	.btn-primary {
-		border: none;
-		background: var(--accent-color);
-		color: white;
-	}
-
-	.btn-primary:hover:not(:disabled) {
-		background: var(--accent-hover);
-	}
-
-	.btn-secondary:disabled,
-	.btn-primary:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
 	}
 </style>

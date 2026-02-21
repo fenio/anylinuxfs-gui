@@ -57,46 +57,6 @@
 		flex-direction: column;
 	}
 
-	.header {
-		margin-bottom: 20px;
-	}
-
-	.header h2 {
-		font-size: 18px;
-		font-weight: 600;
-		color: var(--text-primary);
-		margin: 0;
-	}
-
-	.setting-group {
-		background: var(--card-bg);
-		border: 1px solid var(--border-color);
-		border-radius: 8px;
-		padding: 20px;
-		margin-bottom: 16px;
-	}
-
-	.setting-group h3 {
-		font-size: 15px;
-		font-weight: 600;
-		color: var(--text-primary);
-		margin: 0 0 4px;
-	}
-
-	.setting-group .description {
-		font-size: 13px;
-		color: var(--text-secondary);
-		margin: 0 0 16px;
-	}
-
-	.setting {
-		margin-bottom: 16px;
-	}
-
-	.setting:last-child {
-		margin-bottom: 0;
-	}
-
 	.toggle-row {
 		display: flex;
 		align-items: center;
@@ -113,10 +73,4 @@
 		cursor: not-allowed;
 	}
 
-	.setting .hint {
-		display: block;
-		font-size: 12px;
-		color: var(--text-tertiary);
-		margin-top: 4px;
-	}
 </style>

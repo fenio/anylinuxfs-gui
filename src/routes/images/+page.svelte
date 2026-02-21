@@ -122,50 +122,6 @@
 		flex-direction: column;
 	}
 
-	.header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		margin-bottom: 20px;
-	}
-
-	.header h2 {
-		font-size: 18px;
-		font-weight: 600;
-		color: var(--text-primary);
-		margin: 0;
-	}
-
-	.error-banner {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 10px 14px;
-		background: var(--error-bg);
-		border: 1px solid var(--error-border);
-		border-radius: 6px;
-		color: var(--error-color);
-		font-size: 13px;
-		margin-bottom: 16px;
-	}
-
-	.error-banner button {
-		padding: 4px 10px;
-		border-radius: 4px;
-		border: none;
-		background: var(--error-color);
-		color: white;
-		font-size: 12px;
-		cursor: pointer;
-	}
-
-	.loading,
-	.empty {
-		padding: 24px;
-		text-align: center;
-		color: var(--text-secondary);
-	}
-
 	.images-list {
 		flex: 1;
 		overflow-y: auto;
@@ -221,73 +177,7 @@
 		font-style: italic;
 	}
 
-	.btn-primary,
-	.btn-secondary,
-	.btn-danger {
-		padding: 6px 14px;
-		border-radius: 6px;
-		font-size: 13px;
-		font-weight: 500;
-		cursor: pointer;
-	}
-
-	.btn-primary {
-		border: none;
-		background: var(--accent-color);
-		color: white;
-	}
-
-	.btn-primary:hover:not(:disabled) {
-		background: var(--accent-hover);
-	}
-
-	.btn-secondary {
-		border: 1px solid var(--border-color);
-		background: var(--button-secondary-bg);
-		color: var(--text-primary);
-	}
-
-	.btn-secondary:hover:not(:disabled) {
-		background: var(--button-secondary-hover);
-	}
-
-	.btn-danger {
-		border: none;
-		background: var(--danger-color);
-		color: white;
-	}
-
-	.btn-danger:hover:not(:disabled) {
-		background: var(--danger-hover);
-	}
-
-	.btn-primary:disabled,
-	.btn-secondary:disabled,
-	.btn-danger:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-
-	.info-section {
-		margin-top: 20px;
-		padding: 16px;
-		background: var(--neutral-bg);
-		border: 1px solid var(--border-color);
-		border-radius: 8px;
-	}
-
-	.info-section p {
-		margin: 0 0 8px;
-		font-size: 13px;
-		color: var(--text-secondary);
-	}
-
-	.info-section p:last-child {
-		margin-bottom: 0;
-	}
-
 	.info-section strong {
-		color: var(--text-primary);
 		font-family: monospace;
 	}
 </style>

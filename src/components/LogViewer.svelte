@@ -139,18 +139,8 @@
 	}
 
 	.header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
 		margin-bottom: 16px;
 		flex-shrink: 0;
-	}
-
-	.header h2 {
-		font-size: 18px;
-		font-weight: 600;
-		color: var(--text-primary);
-		margin: 0;
 	}
 
 	.controls {
@@ -192,12 +182,6 @@
 	}
 
 	.error-banner {
-		padding: 10px 14px;
-		background: var(--error-bg);
-		border: 1px solid var(--error-border);
-		border-radius: 6px;
-		color: var(--error-color);
-		font-size: 13px;
 		margin-bottom: 12px;
 		flex-shrink: 0;
 	}
@@ -215,8 +199,6 @@
 
 	.loading,
 	.empty {
-		padding: 24px;
-		text-align: center;
 		color: var(--log-text-secondary);
 	}
 
