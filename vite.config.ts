@@ -5,7 +5,7 @@ export default defineConfig({
 	plugins: [sveltekit()],
 	clearScreen: false,
 	server: {
-		port: 5173,
+		port: 2137,
 		strictPort: true
 	},
 	build: {
