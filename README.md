@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.jpg" alt="anylinuxfs GUI" />
+  <img src="anylinuxfs_gui_logo.png" alt="anylinuxfs GUI" />
 </p>
 
 A macOS GUI application for [anylinuxfs](https://github.com/nohajc/anylinuxfs) - mount Linux filesystems (ext4, btrfs, XFS, etc.) on macOS.
