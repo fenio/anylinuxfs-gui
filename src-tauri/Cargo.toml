@@ -1,6 +1,6 @@
 [package]
 name = "anylinuxfs-gui"
-version = "0.5.1"
+version = "0.6.0"
 edition = "2021"
 
 [lib]
@@ -11,7 +11,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon"] }
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-shell = "2"
 tauri-plugin-log = "2"
 log = "0.4"

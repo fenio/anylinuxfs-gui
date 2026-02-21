@@ -109,8 +109,10 @@ pub fn run() {
                 .item(&quit_item)
                 .build()?;
 
+            let tray_icon = tauri::image::Image::from_bytes(include_bytes!("../../static/tray.png"))
+                .expect("failed to load tray.png");
             let _tray = TrayIconBuilder::new()
-                .icon(app.default_window_icon().expect("default window icon must be set in tauri.conf.json").clone())
+                .icon(tray_icon)
                 .icon_as_template(true)
                 .menu(&menu)
                 .on_tray_icon_event(|tray, event| {

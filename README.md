@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="static/anylinuxfs.png" width="128" height="128" alt="anylinuxfs GUI icon" />
+</p>
+
 # anylinuxfs GUI
 
 A macOS GUI application for [anylinuxfs](https://github.com/nohajc/anylinuxfs) - mount Linux filesystems (ext4, btrfs, XFS, etc.) on macOS.
