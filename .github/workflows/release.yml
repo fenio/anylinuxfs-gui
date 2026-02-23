@@ -108,8 +108,14 @@ jobs:
             desc "macOS GUI for anylinuxfs - mount Linux filesystems on macOS"
             homepage "https://github.com/fenio/anylinuxfs-gui"
 
-            depends_on formula: "nohajc/anylinuxfs/anylinuxfs"
             depends_on arch: :arm64
+
+            preflight do
+              system_command "/opt/homebrew/bin/brew",
+                             args: ["tap", "nohajc/anylinuxfs"]
+              system_command "/opt/homebrew/bin/brew",
+                             args: ["install", "nohajc/anylinuxfs/anylinuxfs"]
+            end
 
             app "anylinuxfs-gui.app"
 
