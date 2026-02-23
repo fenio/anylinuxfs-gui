@@ -257,7 +257,7 @@ fn execute_with_sudo(args: &[&str], passphrase: Option<&str>, silent: bool) -> R
         None => {
             if silent {
                 log::debug!("sudo: native auth expired, silent mode — skipping password dialog");
-                return Err("AUTH_EXPIRED".to_string());
+                return Err("ALFS_SILENT_AUTH_EXPIRED".to_string());
             }
             log::debug!("sudo: native auth unavailable, falling back to password dialog");
         }
@@ -345,15 +345,7 @@ fn execute_with_sudo(args: &[&str], passphrase: Option<&str>, silent: bool) -> R
 
 fn create_askpass_script() -> Result<String, String> {
     use std::io::Write;
-    use std::os::unix::fs::OpenOptionsExt;
-
-    // Use unique filename with PID and timestamp to prevent race conditions
-    let pid = std::process::id();
-    let timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
-    let script_path = format!("/tmp/anylinuxfs-askpass-{}-{}.sh", pid, timestamp);
+    use std::os::unix::fs::PermissionsExt;
 
     // Create askpass script that uses osascript to prompt for password
     // The password goes directly from osascript to sudo, never through our app
@@ -361,17 +353,24 @@ fn create_askpass_script() -> Result<String, String> {
 osascript -e 'Tell application "System Events" to display dialog "anylinuxfs requires administrator privileges." & return & return & "Enter your password:" with hidden answer default answer "" buttons {"Cancel", "OK"} default button "OK" with title "Authentication Required" with icon caution' -e 'text returned of result' 2>/dev/null
 "#;
 
-    // Create file with restrictive permissions from the start (0700)
-    // This prevents TOCTOU race conditions
-    let mut file = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)  // Fail if file already exists
-        .mode(0o700)
-        .open(&script_path)
+    // Use tempfile for a cryptographically random filename, preventing symlink attacks
+    let mut file = tempfile::Builder::new()
+        .prefix("anylinuxfs-askpass-")
+        .suffix(".sh")
+        .tempfile()
         .map_err(|e| format!("Failed to create askpass script: {}", e))?;
+
+    // Set restrictive permissions (owner-only executable)
+    file.as_file().set_permissions(fs::Permissions::from_mode(0o700))
+        .map_err(|e| format!("Failed to set askpass script permissions: {}", e))?;
 
     file.write_all(script_content.as_bytes())
         .map_err(|e| format!("Failed to write askpass script: {}", e))?;
 
-    Ok(script_path)
+    // Persist the file (disables auto-delete) so sudo can read it;
+    // the caller is responsible for removing it after use
+    let (_, path) = file.keep()
+        .map_err(|e| format!("Failed to persist askpass script: {}", e))?;
+
+    Ok(path.to_string_lossy().to_string())
 }

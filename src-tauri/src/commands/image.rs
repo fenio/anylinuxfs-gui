@@ -1,6 +1,22 @@
 use serde::Serialize;
 use crate::cli::execute_command;
 
+/// Validate image name format to prevent path traversal or command injection.
+/// Image names should only contain alphanumeric characters, hyphens, dots, and underscores.
+pub fn validate_image_name(image: &str) -> Result<(), String> {
+    if image.is_empty() {
+        return Err("Image name cannot be empty".to_string());
+    }
+    let valid = image.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.' || c == '_');
+    if !valid {
+        return Err(format!("Invalid image name '{}': contains invalid characters", image));
+    }
+    if image.contains("..") {
+        return Err("Image name cannot contain '..'".to_string());
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct VmImage {
     pub name: String,
@@ -33,6 +49,7 @@ pub fn list_images() -> Result<Vec<VmImage>, String> {
 
 #[tauri::command]
 pub async fn install_image(name: String) -> Result<(), String> {
+    validate_image_name(&name)?;
     tokio::task::spawn_blocking(move || {
         execute_command(&["image", "install", &name], false, None, false)?;
         Ok(())
@@ -43,6 +60,7 @@ pub async fn install_image(name: String) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn uninstall_image(name: String) -> Result<(), String> {
+    validate_image_name(&name)?;
     tokio::task::spawn_blocking(move || {
         execute_command(&["image", "uninstall", &name], false, None, false)?;
         Ok(())

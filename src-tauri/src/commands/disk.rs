@@ -19,11 +19,12 @@ fn validate_device_path(device: &str) -> Result<(), String> {
         return Err("Device path cannot contain '..'".to_string());
     }
     if device.starts_with("/dev/") {
-        // Normal device: allow alphanumeric, slash, dash, underscore
-        let valid_chars = device.chars().all(|c| {
-            c.is_ascii_alphanumeric() || c == '/' || c == '-' || c == '_'
+        // Normal device: only allow alphanumeric, dash, underscore after /dev/ prefix
+        let suffix = &device["/dev/".len()..];
+        let valid_chars = suffix.chars().all(|c| {
+            c.is_ascii_alphanumeric() || c == '-' || c == '_'
         });
-        if !valid_chars {
+        if suffix.is_empty() || !valid_chars {
             return Err("Device path contains invalid characters".to_string());
         }
     } else if device.starts_with("raid:") || device.starts_with("lvm:") {
@@ -496,10 +497,12 @@ pub async fn mount_disk(app: AppHandle, device: String, passphrase: Option<Strin
     // Validate device path before use
     validate_device_path(&device)?;
 
-    // Sanitize extra_options to prevent command injection
+    // Sanitize extra_options with a whitelist to prevent command injection
     if let Some(ref opts) = extra_options {
-        let forbidden = [';', '|', '&', '`', '$', '(', ')', '\n', '\r'];
-        if opts.chars().any(|c| forbidden.contains(&c)) {
+        let valid = opts.chars().all(|c| {
+            c.is_ascii_alphanumeric() || matches!(c, ',' | '.' | '_' | '-' | '=' | '/')
+        });
+        if !valid {
             return Err("Mount options contain invalid characters".to_string());
         }
     }

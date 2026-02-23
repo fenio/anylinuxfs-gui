@@ -48,7 +48,7 @@ function createDisksStore() {
 				}));
 			} catch (e) {
 				const rawError = String(e);
-				if (silent && rawError.includes('AUTH_EXPIRED')) {
+				if (silent && rawError.includes('ALFS_SILENT_AUTH_EXPIRED')) {
 					// Credentials expired during auto-refresh — disable admin mode quietly
 					currentAdminMode = false;
 					update((s) => ({

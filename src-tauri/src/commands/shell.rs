@@ -3,22 +3,7 @@ use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter};
 use crate::cli::get_path;
-
-/// Validate image name format to prevent path traversal or command injection
-/// Image names should only contain alphanumeric characters, hyphens, dots, and underscores
-fn validate_image_name(image: &str) -> Result<(), String> {
-    if image.is_empty() {
-        return Err("Image name cannot be empty".to_string());
-    }
-    let valid = image.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.' || c == '_');
-    if !valid {
-        return Err(format!("Invalid image name '{}': contains invalid characters", image));
-    }
-    if image.contains("..") {
-        return Err("Image name cannot contain '..'".to_string());
-    }
-    Ok(())
-}
+use super::image::validate_image_name;
 
 pub struct PtyState {
     writer: Option<Box<dyn Write + Send>>,

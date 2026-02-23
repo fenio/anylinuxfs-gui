@@ -22,7 +22,7 @@ export const Limits = {
 } as const;
 
 // Device validation
-const DEVICE_PATH_REGEX = /^\/dev\/[a-zA-Z0-9_-]+[a-zA-Z0-9_\-s]*$/;
+const DEVICE_PATH_REGEX = /^\/dev\/[a-zA-Z0-9_-]+$/;
 const RAID_PATH_REGEX = /^raid:[a-zA-Z0-9:_-]+$/;
 const LVM_PATH_REGEX = /^lvm:[a-zA-Z0-9:_-]+$/;
 

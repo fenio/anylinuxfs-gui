@@ -128,7 +128,7 @@
 		<div class="status-info">
 			<div class="status-label">No disk mounted</div>
 			<div class="status-details">
-				<span class="detail-item">Select a partition below to mount</span>
+				<span class="detail-item">{$disks.disks.length > 0 ? 'Select a partition below to mount' : 'Connect a drive to get started'}</span>
 			</div>
 		</div>
 	</div>
