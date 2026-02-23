@@ -15,6 +15,11 @@ A macOS GUI application for [anylinuxfs](https://github.com/nohajc/anylinuxfs) -
 - **Package Management** - Add/remove custom Alpine packages to extend VM capabilities
 - **Real-time Monitoring** - Live mount status and log viewer with follow mode
 - **VM Configuration** - Customize RAM, vCPUs, and log verbosity
+- **System Tray** - Menu bar icon with quick access to show/hide, unmount, and quit
+- **Admin Mode** - Privilege escalation for accessing disks that require sudo
+- **Launch at Login** - Optional auto-start via macOS Launch Agent
+- **Quit Protection** - Warns before quitting if a filesystem is still mounted
+- **Force Cleanup** - Detect and clean up orphaned VM instances from failed mounts
 - **Auto-refresh** - Disk list updates automatically when drives are connected/ejected
 - **Native macOS** - Light/dark mode support, Apple Silicon optimized
 
