@@ -27,7 +27,7 @@ fn validate_package_name(name: &str) -> Result<(), String> {
 
 #[tauri::command]
 pub fn list_packages() -> Result<Vec<String>, String> {
-    let output = execute_command(&["apk", "info"], false, None)?;
+    let output = execute_command(&["apk", "info"], false, None, false)?;
 
     let packages: Vec<String> = output
         .lines()
@@ -53,7 +53,7 @@ pub async fn add_packages(packages: Vec<String>) -> Result<(), String> {
         let mut args = vec!["apk", "add"];
         let pkg_refs: Vec<&str> = packages.iter().map(|s| s.as_str()).collect();
         args.extend(pkg_refs);
-        execute_command(&args, false, None)?;
+        execute_command(&args, false, None, false)?;
         Ok(())
     })
     .await
@@ -75,7 +75,7 @@ pub async fn remove_packages(packages: Vec<String>) -> Result<(), String> {
         let mut args = vec!["apk", "del"];
         let pkg_refs: Vec<&str> = packages.iter().map(|s| s.as_str()).collect();
         args.extend(pkg_refs);
-        execute_command(&args, false, None)?;
+        execute_command(&args, false, None, false)?;
         Ok(())
     })
     .await

@@ -5,8 +5,8 @@ export async function checkCli(): Promise<CliStatus> {
 	return await invoke<CliStatus>('check_cli');
 }
 
-export async function listDisks(useSudo: boolean = false): Promise<DiskListResult> {
-	return await invoke<DiskListResult>('list_disks', { useSudo });
+export async function listDisks(useSudo: boolean = false, silent: boolean = false): Promise<DiskListResult> {
+	return await invoke<DiskListResult>('list_disks', { useSudo, silent });
 }
 
 export async function mountDisk(device: string, passphrase?: string, readOnly?: boolean, extraOptions?: string): Promise<string> {

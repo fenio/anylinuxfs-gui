@@ -79,11 +79,11 @@ pub struct DiskListResult {
 }
 
 #[tauri::command]
-pub async fn list_disks(use_sudo: bool) -> Result<DiskListResult, String> {
+pub async fn list_disks(use_sudo: bool, silent: bool) -> Result<DiskListResult, String> {
     // Run in blocking task with timeout to avoid freezing UI
     let list_future = tokio::task::spawn_blocking(move || {
         // Run list command (now shows all volumes by default, including broken SD cards)
-        let output = execute_command(&["list"], use_sudo, None)?;
+        let output = execute_command(&["list"], use_sudo, None, silent)?;
         let mut result = parse_disk_list_output(&output)?;
 
         // Check which partitions are already mounted by the system
@@ -533,14 +533,14 @@ pub async fn mount_disk(app: AppHandle, device: String, passphrase: Option<Strin
                 args.extend_from_slice(&["-o", combined]);
             }
             args.push(&device);
-            execute_command(&args, true, pass_ref)
+            execute_command(&args, true, pass_ref, false)
         } else {
             let mut args: Vec<&str> = vec!["mount"];
             if let Some(ref combined) = combined_options {
                 args.extend_from_slice(&["-o", combined]);
             }
             args.push(&device);
-            execute_command(&args, true, pass_ref)
+            execute_command(&args, true, pass_ref, false)
         };
 
         // Helper to detect encryption-related output
@@ -558,7 +558,7 @@ pub async fn mount_disk(app: AppHandle, device: String, passphrase: Option<Strin
         };
         if is_encryption_error(&output_text) {
             // Clean up any leftover VM/processes from the failed probe attempt
-            let _ = execute_command(&["stop"], true, None);
+            let _ = execute_command(&["stop"], true, None, false);
             for _ in 0..20 {
                 thread::sleep(Duration::from_millis(250));
                 cache::invalidate_process_cache();
@@ -625,7 +625,7 @@ fn check_nfs_mount_exists() -> bool {
 pub async fn unmount_disk(app: AppHandle) -> Result<String, String> {
     // Run in blocking task with timeout
     let unmount_future = tokio::task::spawn_blocking(|| {
-        execute_command(&["unmount"], false, None)
+        execute_command(&["unmount"], false, None, false)
     });
 
     let result = timeout(Duration::from_secs(COMMAND_TIMEOUT_SECS), unmount_future)
@@ -669,7 +669,7 @@ pub async fn eject_disk(device: String) -> Result<String, String> {
         // Check if anylinuxfs has anything mounted and unmount first
         if check_nfs_mount_exists() {
             // Unmount anylinuxfs first - this shuts down the VM properly
-            let _ = execute_command(&["unmount"], false, None);
+            let _ = execute_command(&["unmount"], false, None, false);
 
             // Wait for anylinuxfs to fully stop (up to 5 seconds)
             for _ in 0..10 {

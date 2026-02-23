@@ -9,7 +9,7 @@ pub struct VmImage {
 
 #[tauri::command]
 pub fn list_images() -> Result<Vec<VmImage>, String> {
-    let output = execute_command(&["image", "list"], false, None)?;
+    let output = execute_command(&["image", "list"], false, None, false)?;
 
     let mut images = Vec::new();
     for line in output.lines() {
@@ -34,7 +34,7 @@ pub fn list_images() -> Result<Vec<VmImage>, String> {
 #[tauri::command]
 pub async fn install_image(name: String) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
-        execute_command(&["image", "install", &name], false, None)?;
+        execute_command(&["image", "install", &name], false, None, false)?;
         Ok(())
     })
     .await
@@ -44,7 +44,7 @@ pub async fn install_image(name: String) -> Result<(), String> {
 #[tauri::command]
 pub async fn uninstall_image(name: String) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
-        execute_command(&["image", "uninstall", &name], false, None)?;
+        execute_command(&["image", "uninstall", &name], false, None, false)?;
         Ok(())
     })
     .await

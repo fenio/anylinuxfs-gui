@@ -35,11 +35,11 @@ function createDisksStore() {
 
 	return {
 		subscribe,
-		async refresh(useSudo?: boolean) {
+		async refresh(useSudo?: boolean, silent?: boolean) {
 			update((s) => ({ ...s, loading: true, error: null }));
 			try {
 				const adminMode = useSudo ?? currentAdminMode;
-				const result = await listDisks(adminMode);
+				const result = await listDisks(adminMode, silent ?? false);
 				update((s) => ({
 					...s,
 					disks: result.disks,
@@ -47,6 +47,18 @@ function createDisksStore() {
 					loading: false
 				}));
 			} catch (e) {
+				const rawError = String(e);
+				if (silent && rawError.includes('AUTH_EXPIRED')) {
+					// Credentials expired during auto-refresh — disable admin mode quietly
+					currentAdminMode = false;
+					update((s) => ({
+						...s,
+						adminMode: false,
+						loading: false,
+						error: 'Admin credentials expired. Re-enable Admin mode to authenticate again.'
+					}));
+					return;
+				}
 				update((s) => ({ ...s, error: parseError(e).message, loading: false }));
 			}
 		},

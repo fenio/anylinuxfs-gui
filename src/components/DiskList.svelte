@@ -47,9 +47,9 @@
 		// Start watching for disk changes
 		startDiskWatcher().catch((e) => logError('startDiskWatcher', e));
 
-		// Listen for disk change events and auto-refresh
+		// Listen for disk change events and auto-refresh (silent mode to avoid auth dialogs)
 		const unlisten = listen(Events.DISKS_CHANGED, () => {
-			disks.refresh();
+			disks.refresh(undefined, true);
 		});
 
 		return () => {

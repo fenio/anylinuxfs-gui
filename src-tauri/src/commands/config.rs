@@ -52,7 +52,7 @@ where
 #[tauri::command]
 pub fn get_config() -> Result<AppConfig, String> {
     // Run `anylinuxfs config` to get full config with defaults
-    let output = execute_command(&["config"], false, None)?;
+    let output = execute_command(&["config"], false, None, false)?;
 
     // Fix unquoted string values (CLI outputs `log_level = off` instead of `log_level = "off"`)
     let fixed_output = fix_unquoted_strings(&output);
@@ -138,15 +138,15 @@ pub async fn update_config(ram_mb: Option<u32>, vcpus: Option<u32>, log_level: O
     tokio::task::spawn_blocking(move || {
         // Use the CLI to update config values
         if let Some(ram) = ram_mb {
-            execute_command(&["config", "-r", &ram.to_string()], false, None)?;
+            execute_command(&["config", "-r", &ram.to_string()], false, None, false)?;
         }
 
         if let Some(cpus) = vcpus {
-            execute_command(&["config", "-n", &cpus.to_string()], false, None)?;
+            execute_command(&["config", "-n", &cpus.to_string()], false, None, false)?;
         }
 
         if let Some(level) = log_level {
-            execute_command(&["config", "-l", &level], false, None)?;
+            execute_command(&["config", "-l", &level], false, None, false)?;
         }
 
         Ok(())

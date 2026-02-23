@@ -142,9 +142,14 @@ pub fn get_path() -> Option<&'static Path> {
 }
 
 /// Execute an anylinuxfs command with optional sudo elevation
-pub fn execute_command(args: &[&str], needs_sudo: bool, passphrase: Option<&str>) -> Result<String, String> {
+///
+/// When `silent` is true and sudo credentials have expired, returns an
+/// `AUTH_EXPIRED` error instead of showing an interactive password dialog.
+/// This is used for automatic background refreshes (e.g. disk-watcher events)
+/// so the user isn't bombarded with auth dialogs while away from the computer.
+pub fn execute_command(args: &[&str], needs_sudo: bool, passphrase: Option<&str>, silent: bool) -> Result<String, String> {
     if needs_sudo {
-        execute_with_sudo(args, passphrase)
+        execute_with_sudo(args, passphrase, silent)
     } else {
         execute_direct(args, passphrase)
     }
@@ -240,7 +245,7 @@ fn try_sudo_native(cli_path: &Path, args: &[&str], passphrase: Option<&str>) -> 
     }
 }
 
-fn execute_with_sudo(args: &[&str], passphrase: Option<&str>) -> Result<String, String> {
+fn execute_with_sudo(args: &[&str], passphrase: Option<&str>, silent: bool) -> Result<String, String> {
     let cli_path = get_anylinuxfs_path()
         .ok_or_else(|| "anylinuxfs CLI not found in PATH or standard locations".to_string())?;
 
@@ -250,6 +255,10 @@ fn execute_with_sudo(args: &[&str], passphrase: Option<&str>) -> Result<String, 
         Some(Ok(stdout)) => return Ok(stdout),
         Some(Err(e)) => return Err(e),
         None => {
+            if silent {
+                log::debug!("sudo: native auth expired, silent mode — skipping password dialog");
+                return Err("AUTH_EXPIRED".to_string());
+            }
             log::debug!("sudo: native auth unavailable, falling back to password dialog");
         }
     }
