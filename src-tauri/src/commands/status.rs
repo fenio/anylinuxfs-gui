@@ -59,10 +59,10 @@ fn check_reinit_pending() -> bool {
     }
 
     // Check freebsd: directory is freebsd-15.0 etc., so scan for freebsd* dirs
+    // Only flag reinit if the user has actually installed a FreeBSD image
     let freebsd_desired = prefix.join("share/freebsd/rootfs.ver");
     if freebsd_desired.exists() {
         if let Ok(entries) = std::fs::read_dir(&anylinuxfs_dir) {
-            let mut found_installed = false;
             for entry in entries.flatten() {
                 let name = entry.file_name();
                 let name_str = name.to_string_lossy();
@@ -71,12 +71,7 @@ fn check_reinit_pending() -> bool {
                     if version_mismatch(&freebsd_desired, &installed_ver) {
                         return true;
                     }
-                    found_installed = true;
                 }
-            }
-            // Desired version exists but no installed freebsd directory found
-            if !found_installed {
-                return true;
             }
         }
     }
