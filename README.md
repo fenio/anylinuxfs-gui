@@ -18,6 +18,33 @@ A macOS GUI application for [anylinuxfs](https://github.com/nohajc/anylinuxfs) -
 - **Auto-refresh** - Disk list updates automatically when drives are connected/ejected
 - **Native macOS** - Light/dark mode support, Apple Silicon optimized
 
+## Installation
+
+### Homebrew (recommended)
+
+```bash
+brew install fenio/tap/anylinuxfs-gui
+```
+
+This will automatically install the [anylinuxfs CLI](https://github.com/nohajc/anylinuxfs) dependency.
+
+If you get "damaged" or Gatekeeper warnings, run:
+```bash
+xattr -cr /Applications/anylinuxfs-gui.app
+```
+
+### Manual
+
+Download the latest DMG from [Releases](../../releases), open it, and drag the app to Applications.
+
+**Important:** The app is not notarized by Apple. After installation, remove the quarantine attribute:
+
+```bash
+xattr -cr /Applications/anylinuxfs-gui.app
+```
+
+Then you can open the app normally.
+
 ## Screenshots
 
 <picture>
@@ -66,35 +93,7 @@ A macOS GUI application for [anylinuxfs](https://github.com/nohajc/anylinuxfs) -
 ## Requirements
 
 - macOS (Apple Silicon)
-- [anylinuxfs CLI](https://github.com/nohajc/anylinuxfs) installed via Homebrew:
-  ```
-  brew install nohajc/anylinuxfs/anylinuxfs
-  ```
-
-## Installation
-
-### Homebrew (recommended)
-
-```bash
-brew install fenio/tap/anylinuxfs-gui
-```
-
-If you get "damaged" or Gatekeeper warnings, run:
-```bash
-xattr -cr /Applications/anylinuxfs-gui.app
-```
-
-### Manual
-
-Download the latest DMG from [Releases](../../releases), open it, and drag the app to Applications.
-
-**Important:** The app is not notarized by Apple. After installation, remove the quarantine attribute:
-
-```bash
-xattr -cr /Applications/anylinuxfs-gui.app
-```
-
-Then you can open the app normally.
+- [anylinuxfs CLI](https://github.com/nohajc/anylinuxfs) (installed automatically via Homebrew)
 
 ## Building from Source
 
