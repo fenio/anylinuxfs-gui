@@ -117,6 +117,10 @@ npm run tauri build
 
 The built app will be at `src-tauri/target/release/bundle/macos/anylinuxfs-gui.app`
 
+## Credits
+
+Logo designed by [Junaid Iqbal](https://www.fiverr.com/junaidiqbal39).
+
 ## License
 
 GPL-3.0 - see [LICENSE](LICENSE)
