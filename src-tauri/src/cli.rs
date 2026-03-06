@@ -1,6 +1,5 @@
 use std::process::{Command, Stdio};
 use std::io::Read;
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use std::sync::OnceLock;
@@ -263,47 +262,62 @@ fn execute_with_sudo(args: &[&str], passphrase: Option<&str>, silent: bool) -> R
         }
     }
 
-    // Fall back to askpass dialog
-    let askpass_script = create_askpass_script()?;
+    // Fall back to native macOS authorization dialog (supports Touch ID)
+    execute_with_osascript_admin(cli_path, args, passphrase)
+}
 
-    // Preserve ALFS_PASSPHRASE through sudo — env_reset strips it otherwise
+/// Escape a string for use inside a single-quoted shell argument.
+/// Replaces `'` with `'\''` (end quote, escaped quote, start quote).
+fn shell_escape(s: &str) -> String {
+    s.replace('\'', "'\\''")
+}
+
+/// Escape a string for use inside an AppleScript double-quoted string.
+/// Escapes backslashes and double quotes.
+fn applescript_escape(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+/// Execute a command with administrator privileges via the native macOS
+/// authorization dialog (`do shell script ... with administrator privileges`).
+/// This shows the standard macOS auth prompt which supports Touch ID/Face ID.
+fn execute_with_osascript_admin(cli_path: &Path, args: &[&str], passphrase: Option<&str>) -> Result<String, String> {
     let cli_path_str = cli_path.to_string_lossy();
-    let mut sudo_args: Vec<&str> = if passphrase.is_some() {
-        vec!["-A", "--preserve-env=ALFS_PASSPHRASE", "--", &cli_path_str]
-    } else {
-        vec!["-A", "--", &cli_path_str]
-    };
-    sudo_args.extend(args.iter().copied());
 
-    let mut cmd = Command::new("sudo");
-    cmd.args(&sudo_args);
-    cmd.env("SUDO_ASKPASS", &askpass_script);
-    // Use piped stdin instead of null - libkrun's epoll fails with /dev/null
+    // Build the inner shell command: ALFS_PASSPHRASE='...' /path/to/anylinuxfs arg1 arg2
+    let mut shell_cmd = String::new();
+    if let Some(pass) = passphrase {
+        shell_cmd.push_str(&format!("ALFS_PASSPHRASE='{}' ", shell_escape(pass)));
+    }
+    shell_cmd.push_str(&format!("'{}'", shell_escape(&cli_path_str)));
+    for arg in args {
+        shell_cmd.push_str(&format!(" '{}'", shell_escape(arg)));
+    }
+
+    // Wrap in AppleScript: do shell script "<cmd>" with administrator privileges
+    let applescript = format!(
+        "do shell script \"{}\" with administrator privileges",
+        applescript_escape(&shell_cmd)
+    );
+
+    let mut cmd = Command::new("osascript");
+    cmd.arg("-e").arg(&applescript);
     cmd.stdin(Stdio::piped());
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
 
-    if let Some(pass) = passphrase {
-        cmd.env("ALFS_PASSPHRASE", pass);
-    }
-
-    // Spawn the process so we can handle it with timeout
     let mut child = cmd.spawn()
-        .map_err(|e| format!("Failed to execute sudo: {}", e))?;
+        .map_err(|e| format!("Failed to execute osascript: {}", e))?;
 
-    // Wait for process with timeout (30 seconds for mount operations)
-    let timeout = Duration::from_secs(30);
+    // 60-second timeout — user needs time to authenticate via Touch ID / password
+    let timeout = Duration::from_secs(60);
     let start = Instant::now();
 
     loop {
         match child.try_wait() {
             Ok(Some(status)) => {
-                // Process finished
-                let _ = fs::remove_file(&askpass_script);
-
                 let mut stdout = String::new();
                 let mut stderr = String::new();
-
                 if let Some(ref mut out) = child.stdout {
                     let _ = out.read_to_string(&mut stdout);
                 }
@@ -313,64 +327,29 @@ fn execute_with_sudo(args: &[&str], passphrase: Option<&str>, silent: bool) -> R
 
                 if status.success() {
                     return Ok(stdout);
-                } else {
-                    // Check for wrong password or cancelled
-                    if stderr.contains("Sorry, try again") || stderr.contains("incorrect password") {
-                        return Err("Incorrect password".to_string());
-                    } else if stderr.contains("no askpass program") || stderr.contains("no password was provided") {
-                        return Err("Authentication cancelled".to_string());
-                    } else {
-                        return Err(sanitize_error(&stdout, &stderr));
-                    }
                 }
+
+                // User pressed Cancel in the auth dialog
+                if stderr.contains("User canceled")
+                    || stderr.contains("user canceled")
+                    || stderr.contains("-128")
+                {
+                    return Err("Authentication cancelled".to_string());
+                }
+
+                return Err(sanitize_error(&stdout, &stderr));
             }
             Ok(None) => {
-                // Process still running
                 if start.elapsed() > timeout {
-                    // Timeout - kill the process
                     let _ = child.kill();
                     let _ = child.wait();
-                    let _ = fs::remove_file(&askpass_script);
                     return Err("Command timed out".to_string());
                 }
                 std::thread::sleep(Duration::from_millis(100));
             }
             Err(e) => {
-                let _ = fs::remove_file(&askpass_script);
                 return Err(format!("Error waiting for process: {}", e));
             }
         }
     }
-}
-
-fn create_askpass_script() -> Result<String, String> {
-    use std::io::Write;
-    use std::os::unix::fs::PermissionsExt;
-
-    // Create askpass script that uses osascript to prompt for password
-    // The password goes directly from osascript to sudo, never through our app
-    let script_content = r#"#!/bin/bash
-osascript -e 'Tell application "System Events" to display dialog "anylinuxfs requires administrator privileges." & return & return & "Enter your password:" with hidden answer default answer "" buttons {"Cancel", "OK"} default button "OK" with title "Authentication Required" with icon caution' -e 'text returned of result' 2>/dev/null
-"#;
-
-    // Use tempfile for a cryptographically random filename, preventing symlink attacks
-    let mut file = tempfile::Builder::new()
-        .prefix("anylinuxfs-askpass-")
-        .suffix(".sh")
-        .tempfile()
-        .map_err(|e| format!("Failed to create askpass script: {}", e))?;
-
-    // Set restrictive permissions (owner-only executable)
-    file.as_file().set_permissions(fs::Permissions::from_mode(0o700))
-        .map_err(|e| format!("Failed to set askpass script permissions: {}", e))?;
-
-    file.write_all(script_content.as_bytes())
-        .map_err(|e| format!("Failed to write askpass script: {}", e))?;
-
-    // Persist the file (disables auto-delete) so sudo can read it;
-    // the caller is responsible for removing it after use
-    let (_, path) = file.keep()
-        .map_err(|e| format!("Failed to persist askpass script: {}", e))?;
-
-    Ok(path.to_string_lossy().to_string())
 }
