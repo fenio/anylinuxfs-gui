@@ -101,14 +101,14 @@
 	}
 
 	.guide-text code, .guide-text kbd {
-		background: var(--surface-hover, #f0f0f0);
+		background: var(--input-bg);
 		padding: 1px 5px;
 		border-radius: 3px;
 		font-size: 0.9em;
 	}
 
 	.code-block {
-		background: var(--surface-hover, #f0f0f0);
+		background: var(--input-bg);
 		border-radius: 6px;
 		padding: 10px 12px;
 		margin: 8px 0;
