@@ -48,6 +48,28 @@
 			<span class="hint">Automatically start anylinuxfs when you log in.</span>
 		</div>
 	</div>
+
+	<div class="setting-group">
+		<h3>Touch ID</h3>
+		<p class="description">Use Touch ID instead of typing your password for admin actions.</p>
+
+		<div class="setting">
+			<p class="guide-text">
+				macOS can use Touch ID to authenticate <code>sudo</code> commands.
+				Once enabled, anylinuxfs will automatically use Touch ID when mounting disks.
+			</p>
+			<p class="guide-text">To enable, run these commands in Terminal:</p>
+			<div class="code-block">
+				<code>sudo cp /etc/pam.d/sudo_local.template /etc/pam.d/sudo_local</code>
+				<code>sudo nano /etc/pam.d/sudo_local</code>
+			</div>
+			<p class="guide-text">
+				Then uncomment the line containing <code>pam_tid.so</code> (remove the <code>#</code>)
+				and save with <kbd>Ctrl+O</kbd>, <kbd>Enter</kbd>, <kbd>Ctrl+X</kbd>.
+			</p>
+			<span class="hint">This setting persists across macOS updates (Sonoma and later).</span>
+		</div>
+	</div>
 </div>
 
 <style>
@@ -71,6 +93,34 @@
 
 	.toggle-row input:disabled {
 		cursor: not-allowed;
+	}
+
+	.guide-text {
+		margin: 4px 0;
+		line-height: 1.5;
+	}
+
+	.guide-text code, .guide-text kbd {
+		background: var(--surface-hover, #f0f0f0);
+		padding: 1px 5px;
+		border-radius: 3px;
+		font-size: 0.9em;
+	}
+
+	.code-block {
+		background: var(--surface-hover, #f0f0f0);
+		border-radius: 6px;
+		padding: 10px 12px;
+		margin: 8px 0;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+
+	.code-block code {
+		font-size: 0.85em;
+		white-space: pre-wrap;
+		word-break: break-all;
 	}
 
 </style>
