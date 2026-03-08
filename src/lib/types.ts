@@ -3,6 +3,7 @@ export interface Partition {
 	size: string;
 	filesystem: string;
 	label: string | null;
+	uuid: string | null;
 	encrypted: boolean;
 	mounted_by_system: boolean;
 	system_mount_point: string | null;

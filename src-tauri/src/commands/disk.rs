@@ -55,6 +55,7 @@ pub struct Partition {
     pub size: String,
     pub filesystem: String,
     pub label: Option<String>,
+    pub uuid: Option<String>,
     pub encrypted: bool,
     pub mounted_by_system: bool,
     pub system_mount_point: Option<String>,
@@ -160,6 +161,15 @@ fn update_filesystem_support(result: &mut DiskListResult) {
 
     for disk in &mut result.disks {
         for partition in &mut disk.partitions {
+            // Look up diskutil entry for UUID (applies to all partition types)
+            let device_id = partition.device.trim_start_matches("/dev/");
+            let entry = diskutil_info.get(device_id);
+
+            // Set UUID from diskutil if available
+            if let Some(e) = entry {
+                partition.uuid = e.uuid.clone();
+            }
+
             // For RAID/LVM partitions, use filesystem info from list output directly
             if disk.disk_type != DiskType::Normal {
                 let (supported, note) = check_filesystem_support(&partition.filesystem);
@@ -177,14 +187,19 @@ fn update_filesystem_support(result: &mut DiskListResult) {
             }
 
             // Look up diskutil results if available
-            let device_id = partition.device.trim_start_matches("/dev/");
-            if let Some(fs_personality) = diskutil_info.get(device_id) {
-                let (supported, note) = check_filesystem_support(fs_personality);
-                if !fs_personality.is_empty() && !is_linux_native_fs(&partition.filesystem) {
-                    partition.filesystem = fs_personality.clone();
+            if let Some(e) = entry {
+                if let Some(ref fs_personality) = e.fs_personality {
+                    let (supported, note) = check_filesystem_support(fs_personality);
+                    if !fs_personality.is_empty() && !is_linux_native_fs(&partition.filesystem) {
+                        partition.filesystem = fs_personality.clone();
+                    }
+                    partition.supported = supported;
+                    partition.support_note = note;
+                } else {
+                    let (supported, note) = check_filesystem_support(&partition.filesystem);
+                    partition.supported = supported;
+                    partition.support_note = note;
                 }
-                partition.supported = supported;
-                partition.support_note = note;
             } else {
                 let (supported, note) = check_filesystem_support(&partition.filesystem);
                 partition.supported = supported;
@@ -194,7 +209,12 @@ fn update_filesystem_support(result: &mut DiskListResult) {
     }
 }
 
-fn get_all_diskutil_info() -> std::collections::HashMap<String, String> {
+struct DiskutilEntry {
+    fs_personality: Option<String>,
+    uuid: Option<String>,
+}
+
+fn get_all_diskutil_info() -> std::collections::HashMap<String, DiskutilEntry> {
     use std::collections::HashMap;
 
     let mut map = HashMap::new();
@@ -206,15 +226,18 @@ fn get_all_diskutil_info() -> std::collections::HashMap<String, String> {
     for block in text.split("**********") {
         let mut device_id = None;
         let mut fs_personality = None;
+        let mut uuid = None;
         for line in block.lines() {
             if line.contains("Device Identifier:") {
                 device_id = line.split(':').nth(1).map(|s| s.trim().to_string());
             } else if line.contains("File System Personality:") {
                 fs_personality = line.split(':').nth(1).map(|s| s.trim().to_string());
+            } else if line.contains("Disk / Partition UUID:") {
+                uuid = line.split(':').nth(1).map(|s| s.trim().to_string());
             }
         }
-        if let (Some(id), Some(fs)) = (device_id, fs_personality) {
-            map.insert(id, fs);
+        if let Some(id) = device_id {
+            map.insert(id, DiskutilEntry { fs_personality, uuid });
         }
     }
     map
@@ -445,6 +468,7 @@ fn parse_partition_line(line: &str, _disk_device: &str, _partition_num: u32, dis
         size,
         filesystem,
         label,
+        uuid: None,  // Will be populated from diskutil info
         encrypted,
         mounted_by_system: false,  // Will be updated after parsing
         system_mount_point: None,
@@ -500,7 +524,7 @@ pub async fn mount_disk(app: AppHandle, device: String, passphrase: Option<Strin
     // Sanitize extra_options with a whitelist to prevent command injection
     if let Some(ref opts) = extra_options {
         let valid = opts.chars().all(|c| {
-            c.is_ascii_alphanumeric() || matches!(c, ',' | '.' | '_' | '-' | '=' | '/')
+            c.is_ascii_alphanumeric() || matches!(c, ',' | '.' | '_' | '-' | '=' | '/' | ':')
         });
         if !valid {
             return Err("Mount options contain invalid characters".to_string());
@@ -528,16 +552,9 @@ pub async fn mount_disk(app: AppHandle, device: String, passphrase: Option<Strin
         }
         let combined_options = if opts.is_empty() { None } else { Some(opts.join(",")) };
 
-        // RAID/LVM: the device identifier IS the argument (e.g., anylinuxfs raid:disk10s1:disk11s1)
-        // Normal: use explicit mount subcommand
-        let result = if device.starts_with("raid:") || device.starts_with("lvm:") {
-            let mut args: Vec<&str> = Vec::new();
-            if let Some(ref combined) = combined_options {
-                args.extend_from_slice(&["-o", combined]);
-            }
-            args.push(&device);
-            execute_command(&args, true, pass_ref, false)
-        } else {
+        // All device types use the mount subcommand for consistent option handling
+        // (e.g., anylinuxfs mount -o noatime raid:disk10s1:disk11s1)
+        let result = {
             let mut args: Vec<&str> = vec!["mount"];
             if let Some(ref combined) = combined_options {
                 args.extend_from_slice(&["-o", combined]);

@@ -8,15 +8,68 @@
 		onRequestPassphrase: (device: string, readOnly: boolean, extraOptions: string) => void;
 	}
 
+	const DEFAULT_CHIPS = ['noatime', 'nodiratime', 'nobarrier', 'compress-force=zstd:5'];
+	const CHIPS_STORAGE_KEY = 'mountOptionChips';
+
 	let { partition, onRequestPassphrase }: Props = $props();
 
-	let extraOptions = $state('');
-	let showOptions = $state(false);
 	let mounting = $derived($disks.mountingDevice === partition.device);
 	let isUnavailable = $derived(partition.mounted_by_system || !partition.supported);
-	let isDisabled = $derived(isUnavailable || $isMounted);
 
-	const quickChips = ['noatime', 'nodiratime', 'nobarrier', 'compress-force=zstd:5'];
+	// Storage key for per-drive options: prefer UUID, fall back to device path
+	function storageKey(): string {
+		const id = partition.uuid || partition.device;
+		return `mountOptions:${id}`;
+	}
+
+	// Load saved options for this drive
+	function loadSavedOptions(): string {
+		try {
+			return localStorage.getItem(storageKey()) || '';
+		} catch {
+			return '';
+		}
+	}
+
+	// Save options for this drive
+	function saveOptions(opts: string) {
+		try {
+			if (opts) {
+				localStorage.setItem(storageKey(), opts);
+			} else {
+				localStorage.removeItem(storageKey());
+			}
+		} catch {
+			// Ignore storage errors
+		}
+	}
+
+	// Load/save editable chips list (global)
+	function loadChips(): string[] {
+		try {
+			const stored = localStorage.getItem(CHIPS_STORAGE_KEY);
+			if (stored) return JSON.parse(stored);
+		} catch {
+			// Ignore parse errors
+		}
+		return [...DEFAULT_CHIPS];
+	}
+
+	function saveChips(chips: string[]) {
+		try {
+			localStorage.setItem(CHIPS_STORAGE_KEY, JSON.stringify(chips));
+		} catch {
+			// Ignore storage errors
+		}
+	}
+
+	// Initialize state from localStorage
+	let savedOptions = loadSavedOptions();
+	let extraOptions = $state(savedOptions);
+	let showOptions = $state(false);
+	let quickChips = $state(loadChips());
+	let addingChip = $state(false);
+	let newChipValue = $state('');
 
 	function optionParts(): string[] {
 		return extraOptions.split(',').map((s) => s.trim()).filter(Boolean);
@@ -51,11 +104,47 @@
 		return opts.split(',').map((s) => s.trim()).includes(chip);
 	}
 
+	function removeChip(chip: string) {
+		quickChips = quickChips.filter((c) => c !== chip);
+		saveChips(quickChips);
+		// Also remove from active options if it was active
+		const parts = optionParts().filter((p) => p !== chip);
+		extraOptions = parts.join(',');
+	}
+
+	function addChip() {
+		const value = newChipValue.trim();
+		if (value && !quickChips.includes(value)) {
+			quickChips = [...quickChips, value];
+			saveChips(quickChips);
+		}
+		newChipValue = '';
+		addingChip = false;
+	}
+
+	function focusOnMount(node: HTMLElement) {
+		node.focus();
+	}
+
+	function handleAddChipKeydown(e: KeyboardEvent) {
+		if (e.key === 'Enter') {
+			e.preventDefault();
+			addChip();
+		} else if (e.key === 'Escape') {
+			newChipValue = '';
+			addingChip = false;
+		}
+	}
+
 	async function handleMount() {
 		// Split ro out of extraOptions for the backend API
 		const parts = optionParts();
 		const ro = parts.includes('ro');
 		const opts = parts.filter((p) => p !== 'ro').join(',');
+
+		// Save the full options string (including ro) for this drive
+		saveOptions(extraOptions);
+
 		if (partition.encrypted) {
 			onRequestPassphrase(partition.device, ro, opts);
 		} else {
@@ -66,7 +155,6 @@
 				status.refresh();
 			}
 		}
-		extraOptions = '';
 		showOptions = false;
 	}
 </script>
@@ -96,6 +184,11 @@
 					<span class="detail mount-point" title={partition.system_mount_point}>{partition.system_mount_point}</span>
 				{/if}
 			</div>
+			{#if extraOptions && !showOptions && !isUnavailable}
+				<div class="saved-options" title={extraOptions}>
+					<span class="saved-options-label">opts:</span> {extraOptions}
+				</div>
+			{/if}
 		</div>
 		{#if partition.mounted_by_system}
 			<span class="status-note">In use by macOS</span>
@@ -148,13 +241,37 @@
 			/>
 			<div class="chips">
 				{#each quickChips as chip}
-					<button
-						class="chip"
-						class:active={isChipActive(chip, extraOptions)}
-						onclick={() => toggleChip(chip)}
-						disabled={mounting || $isMounted}
-					>{chip}</button>
+					<span class="chip-wrapper" class:active={isChipActive(chip, extraOptions)}>
+						<button
+							class="chip"
+							class:active={isChipActive(chip, extraOptions)}
+							onclick={() => toggleChip(chip)}
+							disabled={mounting || $isMounted}
+						>{chip}</button>
+						<button
+							class="chip-remove"
+							onclick={() => removeChip(chip)}
+							title="Remove option"
+						>&times;</button>
+					</span>
 				{/each}
+				{#if addingChip}
+					<input
+						class="chip-input"
+						type="text"
+						bind:value={newChipValue}
+						onkeydown={handleAddChipKeydown}
+						onblur={addChip}
+						placeholder="option"
+						use:focusOnMount
+					/>
+				{:else}
+					<button
+						class="chip chip-add"
+						onclick={() => (addingChip = true)}
+						title="Add custom option"
+					>+</button>
+				{/if}
 			</div>
 		</div>
 	{/if}
@@ -245,6 +362,23 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+
+	.saved-options {
+		display: flex;
+		align-items: baseline;
+		gap: 4px;
+		font-size: 11px;
+		font-family: monospace;
+		color: var(--text-secondary);
+		margin-top: 4px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.saved-options-label {
+		color: var(--text-tertiary);
 	}
 
 	.partition-details {
@@ -383,32 +517,103 @@
 		gap: 6px;
 	}
 
-	.chip {
-		padding: 4px 10px;
+	.chip-wrapper {
+		display: inline-flex;
+		align-items: stretch;
 		border-radius: 12px;
 		border: 1px solid var(--border-color);
 		background: var(--card-bg);
+		transition: all 0.15s;
+	}
+
+	.chip-wrapper:hover {
+		border-color: var(--accent-color);
+	}
+
+	.chip-wrapper.active {
+		background: var(--accent-color);
+		border-color: var(--accent-color);
+	}
+
+	.chip {
+		padding: 4px 6px 4px 10px;
+		border-radius: 12px 0 0 12px;
+		border: none;
+		background: transparent;
 		color: var(--text-secondary);
 		font-size: 12px;
 		font-family: monospace;
 		cursor: pointer;
-		transition: all 0.15s;
+		transition: color 0.15s;
 	}
 
-	.chip:hover:not(:disabled) {
-		border-color: var(--accent-color);
+	.chip-wrapper:hover .chip {
 		color: var(--text-primary);
 	}
 
-	.chip.active {
-		background: var(--accent-color);
+	.chip-wrapper.active .chip {
 		color: white;
-		border-color: var(--accent-color);
 	}
 
 	.chip:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
+	}
+
+	.chip-remove {
+		padding: 4px 8px 4px 2px;
+		border: none;
+		border-radius: 0 12px 12px 0;
+		background: transparent;
+		color: var(--text-tertiary);
+		font-size: 14px;
+		line-height: 1;
+		cursor: pointer;
+		transition: color 0.15s;
+	}
+
+	.chip-remove:hover {
+		color: var(--error-color);
+	}
+
+	.chip-wrapper.active .chip-remove {
+		color: rgba(255, 255, 255, 0.6);
+	}
+
+	.chip-wrapper.active .chip-remove:hover {
+		color: white;
+	}
+
+	.chip-input {
+		width: 100px;
+		padding: 4px 10px;
+		border-radius: 12px;
+		border: 1px solid var(--accent-color);
+		background: var(--card-bg);
+		color: var(--text-primary);
+		font-size: 12px;
+		font-family: monospace;
+		outline: none;
+	}
+
+	.chip-input::placeholder {
+		color: var(--text-tertiary);
+	}
+
+	.chip-add {
+		padding: 4px 12px;
+		border-radius: 12px;
+		border: 1px dashed var(--border-color);
+		background: transparent;
+		color: var(--text-tertiary);
+		font-size: 14px;
+		cursor: pointer;
+		transition: all 0.15s;
+	}
+
+	.chip-add:hover {
+		border-color: var(--accent-color);
+		color: var(--accent-color);
 	}
 
 	.spinner {
