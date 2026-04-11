@@ -22,7 +22,7 @@
 
 	// Recheck init status when mount status changes (VM gets initialized on first mount/reinit)
 	$effect(() => {
-		if ($status.info.mounted && (vmNotInitialized || reinitPending)) {
+		if ($status.mounts.length > 0 && (vmNotInitialized || reinitPending)) {
 			checkCliStatus();
 		}
 	});

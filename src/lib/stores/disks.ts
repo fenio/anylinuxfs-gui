@@ -9,11 +9,10 @@ interface DisksState {
 	disks: Disk[];
 	loading: boolean;
 	error: string | null;
-	mountingDevice: string | null;
+	mountingDevices: Set<string>;
 	adminMode: boolean;
 	hasSupportedPartitions: boolean;
 	recentUnmount: boolean;
-	currentMountId: number;
 }
 
 function createDisksStore() {
@@ -24,11 +23,10 @@ function createDisksStore() {
 		disks: [],
 		loading: false,
 		error: null,
-		mountingDevice: null,
+		mountingDevices: new Set(),
 		adminMode: false,
 		hasSupportedPartitions: true,
-		recentUnmount: false,
-		currentMountId: 0
+		recentUnmount: false
 	});
 
 	let unmountTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -67,9 +65,9 @@ function createDisksStore() {
 			update((s) => ({ ...s, adminMode: enabled }));
 		},
 		async mount(device: string, passphrase?: string, readOnly?: boolean, extraOptions?: string): Promise<'success' | 'encryption_required' | 'error'> {
-			// Reject if any mount/unmount is already in progress
+			// Reject if this specific device is already being mounted
 			const current = get({ subscribe });
-			if (current.mountingDevice) return 'error';
+			if (current.mountingDevices.has(device)) return 'error';
 
 			// Validate device path
 			const validationError = validateDevicePath(device);
@@ -79,13 +77,20 @@ function createDisksStore() {
 				return 'error';
 			}
 
-			const mountId = Date.now();
 			logAction('Mount started', { device });
-			update((s) => ({ ...s, mountingDevice: device, error: null, recentUnmount: false, currentMountId: mountId }));
+			update((s) => {
+				const devices = new Set(s.mountingDevices);
+				devices.add(device);
+				return { ...s, mountingDevices: devices, error: null, recentUnmount: false };
+			});
 			try {
 				await mountDisk(device, passphrase, readOnly, extraOptions);
 				logAction('Mount completed', { device });
-				update((s) => ({ ...s, mountingDevice: null }));
+				update((s) => {
+					const devices = new Set(s.mountingDevices);
+					devices.delete(device);
+					return { ...s, mountingDevices: devices };
+				});
 				notifyIfHidden('Mount Complete', `${device} mounted successfully.`);
 				return 'success';
 			} catch (e) {
@@ -94,40 +99,35 @@ function createDisksStore() {
 				// Detect encryption-required error from backend
 				if (rawError.includes('ENCRYPTION_REQUIRED')) {
 					logAction('Encryption detected, passphrase needed', { device });
-					update((s) => ({ ...s, mountingDevice: null }));
+					update((s) => {
+						const devices = new Set(s.mountingDevices);
+						devices.delete(device);
+						return { ...s, mountingDevices: devices };
+					});
 					return 'encryption_required';
 				}
 
 				logError('mount', e);
 				const errorMessage = parseError(e).message;
 				notifyIfHidden('Mount Failed', errorMessage);
-				// Don't show error if:
-				// - Unmount was requested while mounting
-				// - Mount was already detected as successful (mountingDevice was cleared)
-				// - A different mount operation started
-				update((s) => ({
-					...s,
-					error: (s.recentUnmount || s.mountingDevice === null || s.currentMountId !== mountId) ? null : errorMessage,
-					mountingDevice: s.currentMountId === mountId ? null : s.mountingDevice
-				}));
+				update((s) => {
+					const devices = new Set(s.mountingDevices);
+					devices.delete(device);
+					return { ...s, error: errorMessage, mountingDevices: devices };
+				});
 				return 'error';
 			}
 		},
-		async unmount() {
-			// Reject if any mount/unmount is already in progress
-			const current = get({ subscribe });
-			if (current.mountingDevice) return false;
-
-			// Set recentUnmount to suppress stale mount errors and orphan warnings
+		async unmount(device?: string) {
+			logAction('Unmount started', { device: device || 'all' });
+			// Set recentUnmount to suppress stale mount errors
 			if (unmountTimeout) clearTimeout(unmountTimeout);
-			logAction('Unmount started');
-			update((s) => ({ ...s, mountingDevice: 'unmounting', error: null, recentUnmount: true }));
+			update((s) => ({ ...s, error: null, recentUnmount: true }));
 			try {
-				await unmountDisk();
+				await unmountDisk(device);
 				// Small delay to let socket file clean up
 				await new Promise((r) => setTimeout(r, Timeouts.UNMOUNT_CLEANUP_DELAY));
-				logAction('Unmount completed');
-				update((s) => ({ ...s, mountingDevice: null }));
+				logAction('Unmount completed', { device: device || 'all' });
 				notifyIfHidden('Unmount Complete', 'Filesystem unmounted successfully.');
 				// Clear recentUnmount after timeout
 				unmountTimeout = setTimeout(() => {
@@ -138,7 +138,7 @@ function createDisksStore() {
 				logError('unmount', e);
 				const errorMessage = parseError(e).message;
 				notifyIfHidden('Unmount Failed', errorMessage);
-				update((s) => ({ ...s, error: errorMessage, mountingDevice: null }));
+				update((s) => ({ ...s, error: errorMessage }));
 				unmountTimeout = setTimeout(() => {
 					update((s) => ({ ...s, recentUnmount: false }));
 				}, Timeouts.RECENT_UNMOUNT_CLEAR);
@@ -147,9 +147,6 @@ function createDisksStore() {
 		},
 		clearError() {
 			update((s) => ({ ...s, error: null }));
-		},
-		clearMounting() {
-			update((s) => ({ ...s, mountingDevice: null }));
 		},
 		cleanup() {
 			if (unmountTimeout) {

@@ -57,7 +57,7 @@
 	</ul>
 
 	<button class="quit-btn" onclick={() => {
-		if ($isMounted && !confirm('A filesystem is currently mounted. Quitting will NOT unmount it automatically.\n\nAre you sure you want to quit?')) return;
+		if ($isMounted && !confirm('Filesystems are currently mounted. Quitting will NOT unmount them automatically.\n\nAre you sure you want to quit?')) return;
 		exit(0);
 	}}>
 		<span class="quit-icon"></span>

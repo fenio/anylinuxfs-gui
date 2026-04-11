@@ -19,6 +19,7 @@
 	let offsetY = $derived(visibleStart * LINE_HEIGHT);
 
 	onMount(() => {
+		logs.loadFiles();
 		logs.load();
 		logs.startStreaming();
 	});
@@ -75,6 +76,18 @@
 	<div class="header">
 		<h2>Logs</h2>
 		<div class="controls">
+			{#if $logs.logFiles.length > 0}
+				<select
+					class="log-file-select"
+					value={$logs.selectedFile || ''}
+					onchange={(e) => logs.selectFile((e.target as HTMLSelectElement).value || null)}
+				>
+					<option value="">All sessions</option>
+					{#each [...$logs.logFiles].reverse() as file}
+						<option value={file.path}>{file.label || file.name}{file.timestamp ? ` — ${file.timestamp}` : ''}</option>
+					{/each}
+				</select>
+			{/if}
 			<span class="line-count">{$logs.lines.length} lines</span>
 			<label class="follow-toggle">
 				<input
@@ -147,6 +160,17 @@
 		display: flex;
 		align-items: center;
 		gap: 12px;
+	}
+
+	.log-file-select {
+		padding: 4px 8px;
+		border: 1px solid var(--border-color);
+		border-radius: 4px;
+		background: var(--card-bg);
+		color: var(--text-primary);
+		font-size: 12px;
+		font-family: monospace;
+		max-width: 220px;
 	}
 
 	.line-count {

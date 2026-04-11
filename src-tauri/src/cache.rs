@@ -47,10 +47,6 @@ impl CommandCache {
         });
     }
 
-    fn invalidate(&mut self, prefix: &str) {
-        self.entries.retain(|k, _| !k.starts_with(prefix));
-    }
-
     fn evict_oldest(&mut self) {
         // Find and remove the oldest entry
         if let Some(oldest_key) = self.entries
@@ -91,17 +87,16 @@ where
 
 /// Cache durations for different command types
 const MOUNT_CACHE_DURATION: Duration = Duration::from_millis(1000);
-const PGREP_CACHE_DURATION: Duration = Duration::from_millis(500);
 /// Max age for cleanup (entries older than this are removed during cleanup)
 const MAX_CACHE_AGE: Duration = Duration::from_secs(60);
 
 /// Get cached mount command output (1 second cache)
+/// Used only for checking which partitions are already mounted by the OS (diskutil).
 pub fn get_mount_output() -> Option<Output> {
     let cache_key = "mount".to_string();
 
     // Check cache first
     let cached = with_cache(|cache| {
-        // Periodically clean up expired entries
         cache.cleanup_expired(MAX_CACHE_AGE);
         cache.get(&cache_key, MOUNT_CACHE_DURATION).cloned()
     })?;
@@ -118,80 +113,9 @@ pub fn get_mount_output() -> Option<Output> {
     Some(output)
 }
 
-/// Get cached pgrep output for checking if krun is running (500ms cache)
-pub fn is_krun_running() -> bool {
-    let cache_key = "pgrep_krun".to_string();
-
-    // Check cache first (also cleanup expired entries periodically)
-    let cached = with_cache(|cache| {
-        cache.cleanup_expired(MAX_CACHE_AGE);
-        cache.get(&cache_key, PGREP_CACHE_DURATION).cloned()
-    }).flatten();
-
-    if let Some(output) = cached {
-        return output.status.success() && !output.stdout.is_empty();
-    }
-
-    // Execute and cache
-    if let Ok(output) = Command::new("pgrep").args(["-x", "krun"]).output() {
-        let result = output.status.success() && !output.stdout.is_empty();
-        with_cache(|cache| {
-            cache.insert(cache_key, output);
-        });
-        return result;
-    }
-
-    false
-}
-
-/// Get cached pgrep output for checking if libkrun is running (500ms cache)
-pub fn is_libkrun_running() -> bool {
-    let cache_key = "pgrep_libkrun".to_string();
-
-    // Check cache first (also cleanup expired entries periodically)
-    let cached = with_cache(|cache| {
-        cache.cleanup_expired(MAX_CACHE_AGE);
-        cache.get(&cache_key, PGREP_CACHE_DURATION).cloned()
-    }).flatten();
-
-    if let Some(output) = cached {
-        return output.status.success() && !output.stdout.is_empty();
-    }
-
-    // Execute and cache
-    if let Ok(output) = Command::new("pgrep").args(["-f", "libkrun"]).output() {
-        let result = output.status.success() && !output.stdout.is_empty();
-        with_cache(|cache| {
-            cache.insert(cache_key, output);
-        });
-        return result;
-    }
-
-    false
-}
-
-/// Check if VM is running (uses cached pgrep)
-pub fn is_vm_running_cached() -> bool {
-    is_krun_running() || is_libkrun_running()
-}
-
 /// Invalidate all caches (call after mount/unmount operations)
 pub fn invalidate_all() {
     with_cache(|cache| {
         cache.entries.clear();
-    });
-}
-
-/// Invalidate mount-related caches
-pub fn invalidate_mount_cache() {
-    with_cache(|cache| {
-        cache.invalidate("mount");
-    });
-}
-
-/// Invalidate process-related caches
-pub fn invalidate_process_cache() {
-    with_cache(|cache| {
-        cache.invalidate("pgrep");
     });
 }

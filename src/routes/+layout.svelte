@@ -1,9 +1,19 @@
 <script lang="ts">
 	import '../app.css';
 	import Sidebar from '../components/Sidebar.svelte';
+	import { status } from '$lib/stores/status';
+	import { onMount, onDestroy } from 'svelte';
 	import type { Snippet } from 'svelte';
 
 	let { children }: { children: Snippet } = $props();
+
+	onMount(() => {
+		status.startListening();
+	});
+
+	onDestroy(() => {
+		status.stopListening();
+	});
 </script>
 
 <div id="app">

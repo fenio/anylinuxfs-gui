@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
 import { listen } from '@tauri-apps/api/event';
-import { getLogContent, startLogStream } from '../api';
+import { getLogContent, startLogStream, listLogFiles, type LogFileInfo } from '../api';
 import { Events, Limits } from '../constants';
 import { logError } from '../logger';
 import { parseError } from '../errors';
@@ -17,6 +17,8 @@ interface LogsState {
 	loading: boolean;
 	error: string | null;
 	following: boolean;
+	logFiles: LogFileInfo[];
+	selectedFile: string | null; // null = all files
 }
 
 // Pre-compute error/warn flags for a line
@@ -33,23 +35,39 @@ function createLogsStore() {
 		lines: [],
 		loading: false,
 		error: null,
-		following: true
+		following: true,
+		logFiles: [],
+		selectedFile: null
 	});
 
 	let unlisten: (() => void) | null = null;
 
 	return {
 		subscribe,
+		async loadFiles() {
+			try {
+				const files = await listLogFiles();
+				update((s) => ({ ...s, logFiles: files }));
+			} catch (e) {
+				logError('logs.loadFiles', e);
+			}
+		},
 		async load() {
 			update((s) => ({ ...s, loading: true, error: null }));
 			try {
-				const rawLines = await getLogContent(Limits.DEFAULT_LOG_LINES);
+				let selectedFile: string | null = null;
+				update((s) => { selectedFile = s.selectedFile; return s; });
+				const rawLines = await getLogContent(Limits.DEFAULT_LOG_LINES, selectedFile || undefined);
 				const lines = rawLines.map(processLine);
 				update((s) => ({ ...s, lines, loading: false }));
 			} catch (e) {
 				logError('logs.load', e);
 				update((s) => ({ ...s, error: parseError(e).message, loading: false }));
 			}
+		},
+		selectFile(filePath: string | null) {
+			update((s) => ({ ...s, selectedFile: filePath, lines: [] }));
+			this.load();
 		},
 		async startStreaming() {
 			try {
@@ -59,6 +77,8 @@ function createLogsStore() {
 				// Listen for batched log events (more efficient than per-line)
 				unlisten = await listen<string[]>(Events.LOG_LINES, (event) => {
 					update((s) => {
+						// Only append streaming lines when viewing all files
+						if (s.selectedFile !== null) return s;
 						const newLines = [...s.lines];
 						for (const line of event.payload) {
 							newLines.push(processLine(line));

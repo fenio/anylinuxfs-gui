@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { disks } from '$lib/stores/disks';
-	import { status, isMounted } from '$lib/stores/status';
+	import { status } from '$lib/stores/status';
 	import DiskCard from './DiskCard.svelte';
 	import PassphraseDialog from './PassphraseDialog.svelte';
 	import { onMount } from 'svelte';
@@ -56,13 +56,6 @@
 			unlisten.then((fn) => fn());
 			disks.cleanup();
 		};
-	});
-
-	// Clear mounting state when we detect mount succeeded via status polling
-	$effect(() => {
-		if ($isMounted && $disks.mountingDevice) {
-			disks.clearMounting();
-		}
 	});
 
 	function handleRequestPassphrase(device: string, readOnly: boolean, extraOptions: string) {

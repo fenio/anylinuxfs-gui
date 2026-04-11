@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { listPackages, addPackages, removePackages } from '$lib/api';
+	import { isMounted } from '$lib/stores/status';
 	import { wrapAsync, parseError } from '$lib/errors';
 
 	let packages = $state<string[]>([]);
@@ -23,7 +24,11 @@
 	}
 
 	onMount(() => {
-		loadPackages();
+		if (!$isMounted) loadPackages();
+	});
+
+	$effect(() => {
+		if (!$isMounted) loadPackages();
 	});
 
 	async function handleAdd() {
@@ -72,18 +77,23 @@
 <div class="packages-page">
 	<div class="header">
 		<h2>Alpine Packages</h2>
-		<button class="btn-secondary" onclick={loadPackages} disabled={loading}>
-			{loading ? 'Loading...' : 'Refresh'}
+		<button class="btn-secondary" onclick={loadPackages} disabled={loading || $isMounted}>
+			{loading && !$isMounted ? 'Loading...' : 'Refresh'}
 		</button>
 	</div>
 
-	{#if error}
+	{#if $isMounted}
+		<div class="mounted-banner">
+			Unmount all filesystems to manage packages.
+		</div>
+	{:else if error}
 		<div class="error-banner" role="alert">
 			<span>{error}</span>
 			<button onclick={() => (error = null)}>Dismiss</button>
 		</div>
 	{/if}
 
+	{#if !$isMounted}
 	<div class="add-package">
 		<input
 			type="text"
@@ -131,6 +141,7 @@
 			</div>
 		{/if}
 	</div>
+	{/if}
 
 	<div class="info-section">
 		<p>Custom packages are installed in the Alpine Linux VM and persist across mounts.</p>
@@ -263,6 +274,16 @@
 	.btn-secondary {
 		padding: 8px 16px;
 		white-space: nowrap;
+	}
+
+	.mounted-banner {
+		padding: 12px 16px;
+		background: var(--info-bg);
+		border: 1px solid var(--info-border);
+		border-radius: 8px;
+		color: var(--info-text);
+		font-size: 13px;
+		margin-bottom: 16px;
 	}
 
 	.info-section a {

@@ -13,8 +13,8 @@ export async function mountDisk(device: string, passphrase?: string, readOnly?: 
 	return await invoke<string>('mount_disk', { device, passphrase: passphrase || null, readOnly: readOnly || false, extraOptions: extraOptions || null });
 }
 
-export async function unmountDisk(): Promise<string> {
-	return await invoke<string>('unmount_disk');
+export async function unmountDisk(device?: string): Promise<string> {
+	return await invoke<string>('unmount_disk', { device: device || null });
 }
 
 export async function ejectDisk(device: string): Promise<string> {
@@ -25,12 +25,24 @@ export async function forceCleanup(): Promise<string> {
 	return await invoke<string>('force_cleanup');
 }
 
-export async function getMountStatus(): Promise<MountInfo> {
-	return await invoke<MountInfo>('get_mount_status');
+export async function getMountStatus(): Promise<MountInfo[]> {
+	return await invoke<MountInfo[]>('get_mount_status');
 }
 
-export async function getLogContent(lines?: number): Promise<string[]> {
-	return await invoke<string[]>('get_log_content', { lines: lines || null });
+export interface LogFileInfo {
+	path: string;
+	name: string;
+	label: string;
+	timestamp: string | null;
+	size: number;
+}
+
+export async function listLogFiles(): Promise<LogFileInfo[]> {
+	return await invoke<LogFileInfo[]>('list_log_files');
+}
+
+export async function getLogContent(lines?: number, filePath?: string): Promise<string[]> {
+	return await invoke<string[]>('get_log_content', { lines: lines || null, filePath: filePath || null });
 }
 
 export async function startLogStream(): Promise<void> {

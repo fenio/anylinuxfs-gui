@@ -7,7 +7,7 @@ use std::sync::mpsc::channel;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
-use crate::paths::get_log_path;
+use crate::paths::{get_log_dir, get_log_paths};
 
 /// State to track and control watcher threads
 pub struct WatcherState {
@@ -35,21 +35,103 @@ impl WatcherState {
     }
 }
 
-#[tauri::command]
-pub fn get_log_content(lines: Option<usize>) -> Result<Vec<String>, String> {
-    let log_path = get_log_path();
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct LogFileInfo {
+    pub path: String,
+    pub name: String,
+    pub label: String,
+    pub timestamp: Option<String>,
+    pub size: u64,
+}
 
-    if !log_path.exists() {
+/// Extract device and mount name from the first few lines of a log file.
+/// Looks for "macOS: disk: /dev/diskXsY" and "macOS: mount name: XXX"
+fn extract_log_label(path: &std::path::Path) -> String {
+    let file = match File::open(path) {
+        Ok(f) => f,
+        Err(_) => return String::new(),
+    };
+    let reader = BufReader::new(file);
+    let mut device = None;
+    let mut mount_name = None;
+
+    for line in reader.lines().take(15).flatten() {
+        if line.starts_with("macOS: disk: ") {
+            device = Some(line.trim_start_matches("macOS: disk: ").to_string());
+        } else if line.starts_with("macOS: mount name: ") {
+            mount_name = Some(line.trim_start_matches("macOS: mount name: ").to_string());
+        }
+        if device.is_some() && mount_name.is_some() {
+            break;
+        }
+    }
+
+    match (device, mount_name) {
+        (Some(d), Some(m)) => format!("{} ({})", d, m),
+        (Some(d), None) => d,
+        (None, Some(m)) => m,
+        (None, None) => String::new(),
+    }
+}
+
+#[tauri::command]
+pub fn list_log_files() -> Result<Vec<LogFileInfo>, String> {
+    let log_paths = get_log_paths();
+    let files: Vec<LogFileInfo> = log_paths.into_iter().map(|p| {
+        let meta = std::fs::metadata(&p);
+        let size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
+        let timestamp = meta.ok()
+            .and_then(|m| m.modified().ok())
+            .map(|t| {
+                let elapsed = t.elapsed().unwrap_or_default();
+                let secs = elapsed.as_secs();
+                if secs < 60 { format!("{}s ago", secs) }
+                else if secs < 3600 { format!("{}m ago", secs / 60) }
+                else if secs < 86400 { format!("{}h ago", secs / 3600) }
+                else { format!("{}d ago", secs / 86400) }
+            });
+        let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        let label = extract_log_label(&p);
+        LogFileInfo {
+            path: p.to_string_lossy().to_string(),
+            name,
+            label,
+            timestamp,
+            size,
+        }
+    }).collect();
+    Ok(files)
+}
+
+#[tauri::command]
+pub fn get_log_content(lines: Option<usize>, file_path: Option<String>) -> Result<Vec<String>, String> {
+    let paths_to_read = if let Some(ref fp) = file_path {
+        // Validate the path is actually an anylinuxfs log
+        let p = PathBuf::from(fp);
+        let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        if !name.starts_with("anylinuxfs") || !name.ends_with(".log") {
+            return Err("Invalid log file path".to_string());
+        }
+        vec![p]
+    } else {
+        get_log_paths()
+    };
+
+    if paths_to_read.is_empty() {
         return Ok(Vec::new());
     }
 
-    let file = File::open(&log_path)
-        .map_err(|e| format!("Failed to open log file: {}", e))?;
-
-    let reader = BufReader::new(file);
-    let all_lines: Vec<String> = reader.lines()
-        .filter_map(|l| l.ok())
-        .collect();
+    // Read lines from log files (oldest first = chronological order)
+    let mut all_lines: Vec<String> = Vec::new();
+    for log_path in &paths_to_read {
+        if let Ok(file) = File::open(log_path) {
+            let reader = BufReader::new(file);
+            let file_lines: Vec<String> = reader.lines()
+                .filter_map(|l| l.ok())
+                .collect();
+            all_lines.extend(file_lines);
+        }
+    }
 
     let max_lines = lines.unwrap_or(500);
     let start = if all_lines.len() > max_lines {
@@ -73,7 +155,7 @@ pub fn start_log_stream(app: AppHandle) -> Result<(), String> {
     // Reset stop flag
     state.log_watcher_stop.store(false, Ordering::SeqCst);
 
-    let log_path = get_log_path();
+    let log_dir = get_log_dir();
 
     // Clone what we need for the thread
     let state_clone = app.state::<Arc<WatcherState>>().inner().clone();
@@ -90,48 +172,51 @@ pub fn start_log_stream(app: AppHandle) -> Result<(), String> {
             }
         };
 
-        // Get initial file size
-        let mut last_pos = if log_path.exists() {
-            std::fs::metadata(&log_path)
-                .map(|m| m.len())
-                .unwrap_or(0)
-        } else {
-            0
-        };
+        // Track last read position per log file
+        let mut file_positions: std::collections::HashMap<PathBuf, u64> = std::collections::HashMap::new();
 
-        // Watch the log directory (parent of log file)
-        if let Some(parent) = log_path.parent() {
-            if watcher.watch(parent, RecursiveMode::NonRecursive).is_err() {
-                log::error!("Failed to watch log directory");
-                state_clone.log_watcher_running.store(false, Ordering::SeqCst);
-                return;
-            }
+        // Initialize positions for existing log files
+        for path in get_log_paths() {
+            let pos = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+            file_positions.insert(path, pos);
         }
 
+        // Watch the log directory for all anylinuxfs log files
+        if watcher.watch(&log_dir, RecursiveMode::NonRecursive).is_err() {
+            log::error!("Failed to watch log directory");
+            state_clone.log_watcher_running.store(false, Ordering::SeqCst);
+            return;
+        }
+
+        // Helper: check if a path is an anylinuxfs log file we care about
+        let is_anylinuxfs_log = |p: &std::path::Path| -> bool {
+            let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+            (name.starts_with("anylinuxfs-") || name == "anylinuxfs.log")
+                && name.ends_with(".log")
+                && !name.contains("kernel") && !name.contains("nethelper")
+        };
+
         loop {
-            // Check if we should stop
             if state_clone.log_watcher_stop.load(Ordering::SeqCst) {
                 break;
             }
 
             match rx.recv_timeout(Duration::from_millis(500)) {
                 Ok(Ok(event)) => {
-                    // Check if this event is for our log file
-                    let is_our_file = event.paths.iter().any(|p| p == &log_path);
+                    for path in &event.paths {
+                        if !is_anylinuxfs_log(path) {
+                            continue;
+                        }
 
-                    if is_our_file {
                         match event.kind {
                             EventKind::Modify(_) | EventKind::Create(_) => {
-                                // Read new lines and batch them
-                                if let Ok(mut file) = File::open(&log_path) {
-                                    let file_len = file.metadata()
-                                        .map(|m| m.len())
-                                        .unwrap_or(0);
+                                if let Ok(mut file) = File::open(path) {
+                                    let file_len = file.metadata().map(|m| m.len()).unwrap_or(0);
+                                    let last_pos = file_positions.get(path).copied().unwrap_or(0);
 
                                     if file_len > last_pos {
                                         if file.seek(SeekFrom::Start(last_pos)).is_ok() {
                                             let reader = BufReader::new(&file);
-                                            // Batch lines to reduce IPC overhead
                                             let lines: Vec<String> = reader.lines()
                                                 .filter_map(|l| l.ok())
                                                 .collect();
@@ -139,12 +224,11 @@ pub fn start_log_stream(app: AppHandle) -> Result<(), String> {
                                                 let _ = app.emit("log-lines", lines);
                                             }
                                         }
-                                        last_pos = file_len;
+                                        file_positions.insert(path.clone(), file_len);
                                     } else if file_len < last_pos {
                                         // File was truncated, read from beginning
                                         if file.seek(SeekFrom::Start(0)).is_ok() {
                                             let reader = BufReader::new(&file);
-                                            // Batch lines to reduce IPC overhead
                                             let lines: Vec<String> = reader.lines()
                                                 .filter_map(|l| l.ok())
                                                 .collect();
@@ -152,7 +236,7 @@ pub fn start_log_stream(app: AppHandle) -> Result<(), String> {
                                                 let _ = app.emit("log-lines", lines);
                                             }
                                         }
-                                        last_pos = file_len;
+                                        file_positions.insert(path.clone(), file_len);
                                     }
                                 }
                             }

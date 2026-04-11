@@ -5,7 +5,7 @@ mod error;
 mod paths;
 
 pub use error::{AppError, AppResult};
-pub use paths::{get_socket_path, get_log_path, COMMAND_TIMEOUT_SECS, MOUNT_TIMEOUT_SECS};
+pub use paths::{get_socket_path, get_log_path, get_log_paths, get_log_dir, COMMAND_TIMEOUT_SECS, MOUNT_TIMEOUT_SECS};
 
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
@@ -34,7 +34,7 @@ fn set_dock_visible(visible: bool) {
 use commands::{
     list_disks, mount_disk, unmount_disk, eject_disk, force_cleanup,
     get_mount_status, check_cli,
-    get_log_content, start_log_stream, start_disk_watcher, stop_watchers,
+    get_log_content, list_log_files, start_log_stream, start_disk_watcher, stop_watchers,
     get_config, update_config,
     start_shell, write_shell, resize_shell, stop_shell,
     list_images, install_image, uninstall_image,
@@ -46,18 +46,18 @@ use commands::{
 fn confirm_quit(app: &tauri::AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        let is_mounted = tokio::task::spawn_blocking(|| {
+        let has_mounts = tokio::task::spawn_blocking(|| {
             commands::get_mount_status_sync()
-                .map(|info| info.mounted)
+                .map(|mounts| !mounts.is_empty())
                 .unwrap_or(false)
         })
         .await
         .unwrap_or(false);
 
-        if is_mounted {
+        if has_mounts {
             let app_clone = app.clone();
             app.dialog()
-                .message("A filesystem is currently mounted. Quitting will NOT unmount it automatically.\n\nAre you sure you want to quit?")
+                .message("Filesystems are currently mounted. Quitting will NOT unmount them automatically.\n\nAre you sure you want to quit?")
                 .title("Confirm Quit")
                 .kind(MessageDialogKind::Warning)
                 .buttons(MessageDialogButtons::OkCancelCustom("Quit".into(), "Cancel".into()))
@@ -144,7 +144,7 @@ pub fn run() {
                         "unmount" => {
                             let app = app.clone();
                             tauri::async_runtime::spawn(async move {
-                                let _ = unmount_disk(app).await;
+                                let _ = unmount_disk(app, None).await;
                             });
                         }
                         "quit" => {
@@ -227,6 +227,7 @@ pub fn run() {
             get_mount_status,
             check_cli,
             get_log_content,
+            list_log_files,
             start_log_stream,
             start_disk_watcher,
             stop_watchers,

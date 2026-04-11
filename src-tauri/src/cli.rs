@@ -141,6 +141,23 @@ pub fn get_path() -> Option<&'static Path> {
     get_anylinuxfs_path().map(|p| p.as_path())
 }
 
+/// Run `anylinuxfs status` (no sudo) and return the raw output.
+/// Returns empty string when nothing is mounted, one line per mount otherwise.
+/// Format: "/dev/disk4s1 on /Volumes/ntfs-test (ntfs, uid=501, ...) VM[cpus: 1, ram: 512 MiB]"
+pub fn get_status() -> Option<String> {
+    let cli_path = get_anylinuxfs_path()?;
+    let output = Command::new(cli_path)
+        .arg("status")
+        .stdin(Stdio::piped())
+        .output()
+        .ok()?;
+    if output.status.success() {
+        Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    } else {
+        None
+    }
+}
+
 /// Execute an anylinuxfs command with optional sudo elevation
 ///
 /// When `silent` is true and sudo credentials have expired, returns an

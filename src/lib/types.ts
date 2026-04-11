@@ -29,14 +29,11 @@ export interface DiskListResult {
 }
 
 export interface MountInfo {
-	mounted: boolean;
-	device: string | null;
-	mount_point: string | null;
+	device: string;
+	mount_point: string;
 	filesystem: string | null;
-	vm_running: boolean;
 	ram_mb: number | null;
 	vcpus: number | null;
-	orphaned_instance: boolean;
 }
 
 export interface AppConfig {

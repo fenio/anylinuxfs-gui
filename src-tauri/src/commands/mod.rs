@@ -9,7 +9,7 @@ pub mod action;
 
 pub use disk::*;
 pub use status::{check_cli, get_mount_status, get_mount_status_sync};
-pub use log::{get_log_content, start_log_stream, start_disk_watcher, stop_watchers, WatcherState};
+pub use log::{get_log_content, list_log_files, start_log_stream, start_disk_watcher, stop_watchers, WatcherState};
 pub use config::*;
 pub use shell::{start_shell, write_shell, resize_shell, stop_shell, PtyState};
 pub use image::*;

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { listImages, installImage, uninstallImage, type VmImage } from '$lib/api';
+	import { isMounted } from '$lib/stores/status';
 	import { wrapAsync, parseError } from '$lib/errors';
 
 	let images = $state<VmImage[]>([]);
@@ -21,7 +22,12 @@
 	}
 
 	onMount(() => {
-		loadImages();
+		if (!$isMounted) loadImages();
+	});
+
+	// Reload when mounts change (e.g. user unmounts while on this page)
+	$effect(() => {
+		if (!$isMounted) loadImages();
 	});
 
 	async function handleInstall(name: string) {
@@ -56,21 +62,25 @@
 <div class="images-page">
 	<div class="header">
 		<h2>VM Images</h2>
-		<button class="btn-secondary" onclick={loadImages} disabled={loading}>
-			{loading ? 'Loading...' : 'Refresh'}
+		<button class="btn-secondary" onclick={loadImages} disabled={loading || $isMounted}>
+			{loading && !$isMounted ? 'Loading...' : 'Refresh'}
 		</button>
 	</div>
 
-	{#if error}
+	{#if $isMounted}
+		<div class="mounted-banner">
+			Unmount all filesystems to manage VM images.
+		</div>
+	{:else if error}
 		<div class="error-banner" role="alert">
 			<span>{error}</span>
 			<button onclick={() => (error = null)}>Dismiss</button>
 		</div>
 	{/if}
 
-	{#if loading && images.length === 0}
+	{#if !$isMounted && loading && images.length === 0}
 		<div class="loading">Loading images...</div>
-	{:else if images.length === 0}
+	{:else if !$isMounted && images.length === 0}
 		<div class="empty">No images available.</div>
 	{:else}
 		<div class="images-list">
@@ -89,7 +99,8 @@
 							<button
 								class="btn-danger"
 								onclick={() => handleUninstall(image.name)}
-								disabled={processingImage !== null}
+								disabled={processingImage !== null || $isMounted}
+								title={$isMounted ? 'Unmount all filesystems first' : ''}
 							>
 								Uninstall
 							</button>
@@ -97,7 +108,8 @@
 							<button
 								class="btn-primary"
 								onclick={() => handleInstall(image.name)}
-								disabled={processingImage !== null}
+								disabled={processingImage !== null || $isMounted}
+								title={$isMounted ? 'Unmount all filesystems first' : ''}
 							>
 								Install
 							</button>
@@ -179,5 +191,15 @@
 
 	.info-section strong {
 		font-family: monospace;
+	}
+
+	.mounted-banner {
+		padding: 12px 16px;
+		background: var(--info-bg);
+		border: 1px solid var(--info-border);
+		border-radius: 8px;
+		color: var(--info-text);
+		font-size: 13px;
+		margin-bottom: 16px;
 	}
 </style>

@@ -22,8 +22,8 @@
 
 	async function checkMountStatus() {
 		try {
-			const status = await getMountStatus();
-			isMounted = status.mounted;
+			const mounts = await getMountStatus();
+			isMounted = mounts.length > 0;
 		} catch {
 			isMounted = false;
 		}
@@ -180,7 +180,7 @@
 		<h2>VM Shell</h2>
 		<div class="actions">
 			{#if isMounted}
-				<span class="status-badge warning">Filesystem mounted</span>
+				<!-- controls hidden when mounted -->
 			{:else if !running}
 				<select class="image-select" bind:value={selectedImage} disabled={installedImages.length === 0}>
 					{#each installedImages as image}
@@ -199,8 +199,8 @@
 	</div>
 
 	{#if isMounted}
-		<div class="warning-banner">
-			<span>Shell is unavailable while a filesystem is mounted. Please unmount first from the Disks page.</span>
+		<div class="mounted-banner">
+			Unmount all filesystems to use the shell.
 		</div>
 	{/if}
 
@@ -242,20 +242,12 @@
 		color: var(--success-color);
 	}
 
-	.status-badge.warning {
-		background: var(--warning-bg-solid);
-		border-color: var(--warning-border);
-		color: var(--warning-text);
-	}
-
-	.warning-banner {
-		display: flex;
-		align-items: center;
-		padding: 10px 14px;
-		background: var(--warning-bg-solid);
-		border: 1px solid var(--warning-border);
-		border-radius: 6px;
-		color: var(--warning-text);
+	.mounted-banner {
+		padding: 12px 16px;
+		background: var(--info-bg);
+		border: 1px solid var(--info-border);
+		border-radius: 8px;
+		color: var(--info-text);
 		font-size: 13px;
 		margin-bottom: 16px;
 	}

@@ -7,21 +7,10 @@ import { logError, logAction } from '../logger';
 import { parseError } from '../errors';
 
 interface StatusState {
-	info: MountInfo;
+	mounts: MountInfo[];
 	loading: boolean;
 	error: string | null;
 }
-
-const defaultInfo: MountInfo = {
-	mounted: false,
-	device: null,
-	mount_point: null,
-	filesystem: null,
-	vm_running: false,
-	ram_mb: null,
-	vcpus: null,
-	orphaned_instance: false
-};
 
 // Longer polling interval since we now have push events
 const FALLBACK_POLL_INTERVAL = 10000; // 10 seconds
@@ -31,7 +20,7 @@ const DEBOUNCE_MS = 500;
 
 function createStatusStore() {
 	const { subscribe, set, update } = writable<StatusState>({
-		info: defaultInfo,
+		mounts: [],
 		loading: false,
 		error: null
 	});
@@ -46,8 +35,8 @@ function createStatusStore() {
 		refreshInProgress = true;
 		update((s) => ({ ...s, loading: true }));
 		try {
-			const info = await getMountStatus();
-			update((s) => ({ ...s, info, loading: false, error: null }));
+			const mounts = await getMountStatus();
+			update((s) => ({ ...s, mounts, loading: false, error: null }));
 		} catch (e) {
 			logError('status.refresh', e);
 			update((s) => ({ ...s, error: parseError(e).message, loading: false }));
@@ -115,6 +104,8 @@ function createStatusStore() {
 
 export const status = createStatusStore();
 
-export const isMounted = derived(status, ($status) => $status.info.mounted);
+export const isMounted = derived(status, ($status) => $status.mounts.length > 0);
 
-export const mountPoint = derived(status, ($status) => $status.info.mount_point);
+export const mountedDevices = derived(status, ($status) =>
+	new Set($status.mounts.map((m) => m.device))
+);

@@ -5,34 +5,21 @@
 	import { Timeouts } from '$lib/constants';
 	import { logAction, logError } from '$lib/logger';
 	import { parseError } from '$lib/errors';
-	import { onMount, onDestroy } from 'svelte';
-
-	let unmounting = $state(false);
+	let unmountingDevices = $state(new Set<string>());
 	let cleaning = $state(false);
 	let error = $state<string | null>(null);
-
-	onMount(() => {
-		status.startListening();
-	});
-
-	onDestroy(() => {
-		status.stopListening();
-	});
 
 	// Sync tray "Unmount" menu item enabled state with mount status
 	$effect(() => {
 		setTrayUnmountEnabled($isMounted).catch(() => {});
 	});
 
-	async function handleUnmount() {
-		unmounting = true;
-		status.stopListening();
-		await disks.unmount();
-		// Wait for VM cleanup before checking status
+	async function handleUnmount(device: string) {
+		unmountingDevices = new Set([...unmountingDevices, device]);
+		await disks.unmount(device);
 		await new Promise((r) => setTimeout(r, Timeouts.LOG_POLL_INTERVAL));
-		unmounting = false;
+		unmountingDevices = new Set([...unmountingDevices].filter((d) => d !== device));
 		status.refresh();
-		status.startListening();
 	}
 
 	async function handleForceCleanup() {
@@ -58,72 +45,52 @@
 	</div>
 {/if}
 
-{#if $isMounted}
-	<div class="mount-status mounted">
-		<div class="status-icon">
-			<span class="icon-mounted" aria-hidden="true"></span>
-			<span class="sr-only">Success</span>
-		</div>
-		<div class="status-info">
-			<div class="status-label">Mounted</div>
-			<div class="status-details">
-				{#if $status.info.device}
-					<span class="detail-item">{$status.info.device}</span>
-				{/if}
-				{#if $status.info.mount_point}
-					<span class="detail-item">{$status.info.mount_point}</span>
-				{/if}
-				{#if $status.info.filesystem}
-					<span class="detail-item fs-badge">{$status.info.filesystem}</span>
-				{/if}
+{#if $status.mounts.length > 0}
+	{#each $status.mounts as mount (mount.device)}
+		<div class="mount-status mounted">
+			<div class="status-icon">
+				<span class="icon-mounted" aria-hidden="true"></span>
+				<span class="sr-only">Success</span>
 			</div>
-		</div>
-		<button
-			class="unmount-btn"
-			onclick={handleUnmount}
-			disabled={unmounting}
-		>
-			{unmounting ? 'Unmounting...' : 'Unmount'}
-		</button>
-	</div>
-{:else if $disks.mountingDevice}
-	<div class="mount-status mounting">
-		<div class="status-icon" role="status" aria-busy="true">
-			<span class="spinner" aria-hidden="true"></span>
-			<span class="sr-only">Loading</span>
-		</div>
-		<div class="status-info">
-			<div class="status-label">
-				{$disks.mountingDevice === 'unmounting' ? 'Unmounting...' : 'Mounting...'}
-			</div>
-			{#if $disks.mountingDevice !== 'unmounting'}
+			<div class="status-info">
+				<div class="status-label">Mounted</div>
 				<div class="status-details">
-					<span class="detail-item">{$disks.mountingDevice}</span>
+					<span class="detail-item">{mount.device}</span>
+					<span class="detail-item">{mount.mount_point}</span>
+					{#if mount.filesystem}
+						<span class="detail-item fs-badge">{mount.filesystem}</span>
+					{/if}
 				</div>
-			{/if}
+			</div>
+			<button
+				class="unmount-btn"
+				onclick={() => handleUnmount(mount.device)}
+				disabled={unmountingDevices.has(mount.device)}
+			>
+				{unmountingDevices.has(mount.device) ? 'Unmounting...' : 'Unmount'}
+			</button>
 		</div>
-	</div>
-{:else if $status.info.orphaned_instance && !$disks.recentUnmount}
-	<div class="mount-status orphaned">
-		<div class="status-icon">
-			<span class="icon-warning" aria-hidden="true"></span>
-			<span class="sr-only">Warning</span>
-		</div>
-		<div class="status-info">
-			<div class="status-label">Orphaned instance detected</div>
-			<div class="status-details">
-				<span class="detail-item">A previous mount failed but the VM is still running.</span>
+	{/each}
+{/if}
+
+{#if $disks.mountingDevices.size > 0}
+	{#each [...$disks.mountingDevices] as device (device)}
+		<div class="mount-status mounting">
+			<div class="status-icon" role="status" aria-busy="true">
+				<span class="spinner" aria-hidden="true"></span>
+				<span class="sr-only">Loading</span>
+			</div>
+			<div class="status-info">
+				<div class="status-label">Mounting...</div>
+				<div class="status-details">
+					<span class="detail-item">{device}</span>
+				</div>
 			</div>
 		</div>
-		<button
-			class="cleanup-btn"
-			onclick={handleForceCleanup}
-			disabled={cleaning}
-		>
-			{cleaning ? 'Cleaning...' : 'Force Cleanup'}
-		</button>
-	</div>
-{:else}
+	{/each}
+{/if}
+
+{#if $status.mounts.length === 0 && $disks.mountingDevices.size === 0}
 	<div class="mount-status not-mounted">
 		<div class="status-info">
 			<div class="status-label">No disk mounted</div>
@@ -169,6 +136,10 @@
 		gap: 12px;
 		padding: 12px 16px;
 		border-radius: 8px;
+		margin-bottom: 8px;
+	}
+
+	.mount-status:last-child {
 		margin-bottom: 16px;
 	}
 
@@ -180,11 +151,6 @@
 	.mount-status.not-mounted {
 		background: var(--neutral-bg);
 		border: 1px solid var(--border-color);
-	}
-
-	.mount-status.orphaned {
-		background: var(--warning-bg-solid);
-		border: 1px solid var(--warning-border);
 	}
 
 	.mount-status.mounting {
@@ -205,12 +171,6 @@
 		content: '\2713';
 		font-size: 18px;
 		color: var(--success-color);
-	}
-
-	.icon-warning::before {
-		content: '\26A0';
-		font-size: 18px;
-		color: var(--warning-border);
 	}
 
 	.status-info {
@@ -258,26 +218,6 @@
 	}
 
 	.unmount-btn:disabled {
-		opacity: 0.6;
-		cursor: not-allowed;
-	}
-
-	.cleanup-btn {
-		padding: 6px 14px;
-		border-radius: 6px;
-		border: none;
-		background: var(--warning-border);
-		color: white;
-		font-size: 13px;
-		cursor: pointer;
-		transition: background-color 0.15s;
-	}
-
-	.cleanup-btn:hover:not(:disabled) {
-		background: var(--warning-text);
-	}
-
-	.cleanup-btn:disabled {
 		opacity: 0.6;
 		cursor: not-allowed;
 	}

@@ -6,7 +6,7 @@ use tauri::{AppHandle, Emitter};
 use tokio::time::timeout;
 use crate::cache;
 use crate::cli::execute_command;
-use crate::paths::{get_socket_path, COMMAND_TIMEOUT_SECS, MOUNT_TIMEOUT_SECS};
+use crate::paths::{COMMAND_TIMEOUT_SECS, MOUNT_TIMEOUT_SECS};
 
 /// Validate device path to prevent command injection
 /// Device must start with /dev/, raid:, or lvm: and contain only safe characters
@@ -531,121 +531,106 @@ pub async fn mount_disk(app: AppHandle, device: String, passphrase: Option<Strin
         }
     }
 
-    // Run in blocking task with timeout to avoid freezing UI
-    let mount_future = tokio::task::spawn_blocking(move || {
-        // If no passphrase provided, use a dummy one so LUKS fails fast
-        // instead of hanging waiting for stdin input
+    // Build combined mount options string
+    let ro = read_only.unwrap_or(false);
+    let mut opts = Vec::new();
+    if ro {
+        opts.push("ro".to_string());
+    }
+    if let Some(ref extra) = extra_options {
+        let trimmed = extra.trim();
+        if !trimmed.is_empty() {
+            opts.push(trimmed.to_string());
+        }
+    }
+    let combined_options = if opts.is_empty() { None } else { Some(opts.join(",")) };
+
+    // Spawn the mount command in a background thread so we can poll status
+    // concurrently — the mount appears in Finder before the command exits
+    let mount_device = device.clone();
+    let mount_result: std::sync::Arc<std::sync::Mutex<Option<Result<String, String>>>> =
+        std::sync::Arc::new(std::sync::Mutex::new(None));
+    let mount_result_bg = mount_result.clone();
+
+    let _mount_thread = tokio::task::spawn_blocking(move || {
         let effective_passphrase = passphrase.unwrap_or_else(|| "##PROBE##".to_string());
         let pass_ref = Some(effective_passphrase.as_str());
-        let ro = read_only.unwrap_or(false);
 
-        // Build combined mount options string
-        let mut opts = Vec::new();
-        if ro {
-            opts.push("ro".to_string());
-        }
-        if let Some(ref extra) = extra_options {
-            let trimmed = extra.trim();
-            if !trimmed.is_empty() {
-                opts.push(trimmed.to_string());
-            }
-        }
-        let combined_options = if opts.is_empty() { None } else { Some(opts.join(",")) };
-
-        // All device types use the mount subcommand for consistent option handling
-        // (e.g., anylinuxfs mount -o noatime raid:disk10s1:disk11s1)
         let result = {
             let mut args: Vec<&str> = vec!["mount"];
             if let Some(ref combined) = combined_options {
                 args.extend_from_slice(&["-o", combined]);
             }
-            args.push(&device);
+            args.push(&mount_device);
             execute_command(&args, true, pass_ref, false)
         };
 
-        // Helper to detect encryption-related output
-        let is_encryption_error = |text: &str| -> bool {
-            let lower = text.to_lowercase();
-            lower.contains("luks") || lower.contains("decrypt")
-                || lower.contains("passphrase") || lower.contains("password")
-                || lower.contains("encrypted") || lower.contains("wrong key")
-        };
-
-        // Check if failure was due to encryption — clean up and return special error
-        let output_text = match &result {
-            Ok(out) => out.clone(),
-            Err(e) => e.clone(),
-        };
-        if is_encryption_error(&output_text) {
-            // Clean up any leftover VM/processes from the failed probe attempt
-            let _ = execute_command(&["stop"], true, None, false);
-            for _ in 0..20 {
-                thread::sleep(Duration::from_millis(250));
-                cache::invalidate_process_cache();
-                if !cache::is_krun_running() {
-                    break;
-                }
-            }
-            cache::invalidate_all();
-            return Err("ENCRYPTION_REQUIRED: This partition is encrypted. A passphrase is needed to mount it.".to_string());
-        }
-
-        // Check immediately first, then retry with short intervals
-        // 40 retries × 250ms = 10 seconds total timeout
-        for i in 0..40 {
-            // Invalidate cache to get fresh mount data
-            cache::invalidate_mount_cache();
-            if check_nfs_mount_exists() {
-                return Ok(result.unwrap_or_else(|_| "Mounted successfully".to_string()));
-            }
-            // Don't sleep on first iteration - check immediately
-            if i > 0 {
-                thread::sleep(Duration::from_millis(250));
-            }
-        }
-
-        // Mount verification failed - return error with details
-        match result {
-            Ok(output) => {
-                // CLI succeeded but mount not visible - likely filesystem error
-                if output.contains("wrong fs type") || output.contains("mount:") {
-                    Err(format!("Mount failed: {}", output))
-                } else {
-                    Err("Mount failed: filesystem not mounted after timeout".to_string())
-                }
-            }
-            Err(e) => Err(e),
-        }
+        *mount_result_bg.lock().unwrap() = Some(result);
     });
 
-    // Apply overall timeout
-    let result = timeout(Duration::from_secs(MOUNT_TIMEOUT_SECS), mount_future)
-        .await
-        .map_err(|_| format!("Mount operation timed out after {} seconds", MOUNT_TIMEOUT_SECS))?
-        .map_err(|e| format!("Task error: {}", e))?;
+    // Helper to detect encryption-related output
+    let is_encryption_error = |text: &str| -> bool {
+        let lower = text.to_lowercase();
+        lower.contains("luks") || lower.contains("decrypt")
+            || lower.contains("passphrase") || lower.contains("password")
+            || lower.contains("encrypted") || lower.contains("wrong key")
+    };
 
-    // Emit status changed event regardless of success/failure
+    // Poll `anylinuxfs status` concurrently while mount command runs
+    // 120 retries × 500ms = 60 seconds total timeout
+    for i in 0..120 {
+        if i > 0 {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+
+        // Check if mount command finished with an error
+        if let Some(ref result) = *mount_result.lock().unwrap() {
+            let output_text = match result {
+                Ok(out) => out.clone(),
+                Err(e) => e.clone(),
+            };
+            if is_encryption_error(&output_text) {
+                // Clean up leftover VM from the failed probe attempt
+                let _ = execute_command(&["stop"], true, None, false);
+                let _ = app.emit("status-changed", ());
+                return Err("ENCRYPTION_REQUIRED: This partition is encrypted. A passphrase is needed to mount it.".to_string());
+            }
+            if result.is_err() {
+                let _ = app.emit("status-changed", ());
+                return Err(result.as_ref().unwrap_err().clone());
+            }
+        }
+
+        // Check if this specific device appeared in `anylinuxfs status`
+        if check_device_mounted(&device) {
+            let _ = app.emit("status-changed", ());
+            return Ok("Mounted successfully".to_string());
+        }
+    }
+
     let _ = app.emit("status-changed", ());
-
-    result
+    Err(format!("Mount operation timed out after {} seconds", MOUNT_TIMEOUT_SECS))
 }
 
-fn check_nfs_mount_exists() -> bool {
-    // Use cached mount output to avoid redundant process spawning
-    if let Some(output) = cache::get_mount_output() {
-        let mount_output = String::from_utf8_lossy(&output.stdout);
-        // Look for anylinuxfs NFS mount pattern
-        mount_output.contains("localhost:/mnt/") && mount_output.contains("/Volumes/")
-    } else {
-        false
-    }
+fn check_device_mounted(device: &str) -> bool {
+    crate::cli::get_status()
+        .map(|s| s.lines().any(|line| line.starts_with(device)))
+        .unwrap_or(false)
 }
 
 #[tauri::command]
-pub async fn unmount_disk(app: AppHandle) -> Result<String, String> {
+pub async fn unmount_disk(app: AppHandle, device: Option<String>) -> Result<String, String> {
+    // Validate device path if provided
+    if let Some(ref dev) = device {
+        validate_device_path(dev)?;
+    }
+
     // Run in blocking task with timeout
-    let unmount_future = tokio::task::spawn_blocking(|| {
-        execute_command(&["unmount"], false, None, false)
+    let unmount_future = tokio::task::spawn_blocking(move || {
+        match device {
+            Some(ref dev) => execute_command(&["unmount", dev], false, None, false),
+            None => execute_command(&["unmount"], false, None, false),
+        }
     });
 
     let result = timeout(Duration::from_secs(COMMAND_TIMEOUT_SECS), unmount_future)
@@ -653,16 +638,7 @@ pub async fn unmount_disk(app: AppHandle) -> Result<String, String> {
         .map_err(|_| format!("Unmount timed out after {} seconds", COMMAND_TIMEOUT_SECS))?
         .map_err(|e| format!("Task error: {}", e))?;
 
-    // Wait for VM to fully shut down by polling until krun process is gone
-    // 40 retries × 250ms = 10 seconds max wait
-    for _ in 0..40 {
-        if !is_vm_running() {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(250)).await;
-    }
-
-    // Invalidate all caches after unmount
+    // Invalidate caches after unmount
     cache::invalidate_all();
 
     // Emit status changed event
@@ -671,12 +647,6 @@ pub async fn unmount_disk(app: AppHandle) -> Result<String, String> {
     result
 }
 
-/// Check if the VM (krun) process is running
-fn is_vm_running() -> bool {
-    // Use cached pgrep result, but invalidate first since we're polling for shutdown
-    cache::invalidate_process_cache();
-    cache::is_krun_running()
-}
 
 #[tauri::command]
 pub async fn eject_disk(device: String) -> Result<String, String> {
@@ -686,22 +656,17 @@ pub async fn eject_disk(device: String) -> Result<String, String> {
     // Eject (power down) a disk using diskutil
     // First unmount anylinuxfs if it has anything mounted, then eject
     let eject_future = tokio::task::spawn_blocking(move || {
-        // Check if anylinuxfs has anything mounted and unmount first
-        if check_nfs_mount_exists() {
-            // Unmount anylinuxfs first - this shuts down the VM properly
-            let _ = execute_command(&["unmount"], false, None, false);
+        // Check if this device is mounted by anylinuxfs and unmount it first
+        if check_device_mounted(&device) {
+            let _ = execute_command(&["unmount", &device], false, None, false);
 
-            // Wait for anylinuxfs to fully stop (up to 5 seconds)
+            // Wait for this device to be unmounted (up to 5 seconds)
             for _ in 0..10 {
                 thread::sleep(Duration::from_millis(500));
-                // Invalidate cache to get fresh mount data
-                cache::invalidate_mount_cache();
-                if !check_nfs_mount_exists() {
+                if !check_device_mounted(&device) {
                     break;
                 }
             }
-            // Invalidate all caches after unmount
-            cache::invalidate_all();
         }
 
         // Now safe to eject the disk
@@ -726,37 +691,9 @@ pub async fn eject_disk(device: String) -> Result<String, String> {
 
 #[tauri::command]
 pub async fn force_cleanup() -> Result<String, String> {
-    // Force kill orphaned anylinuxfs/krun processes
+    // Use `anylinuxfs stop` to cleanly stop all instances
     tokio::task::spawn_blocking(|| {
-        let mut killed = Vec::new();
-
-        // Kill krun processes
-        if let Ok(output) = Command::new("pkill").args(["-9", "krun"]).output() {
-            if output.status.success() {
-                killed.push("krun");
-            }
-        }
-
-        // Kill any anylinuxfs processes
-        if let Ok(output) = Command::new("pkill").args(["-9", "-f", "anylinuxfs"]).output() {
-            if output.status.success() {
-                killed.push("anylinuxfs");
-            }
-        }
-
-        // Remove socket file if it exists
-        let socket_path = get_socket_path();
-        if socket_path.exists() {
-            if std::fs::remove_file(&socket_path).is_ok() {
-                killed.push("socket");
-            }
-        }
-
-        if killed.is_empty() {
-            Ok("No processes found to clean up".to_string())
-        } else {
-            Ok(format!("Cleaned up: {}", killed.join(", ")))
-        }
+        execute_command(&["stop"], false, None, false)
     })
     .await
     .map_err(|e| format!("Task error: {}", e))?

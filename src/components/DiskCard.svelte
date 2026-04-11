@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Partition } from '$lib/types';
 	import { disks } from '$lib/stores/disks';
-	import { status, isMounted } from '$lib/stores/status';
+	import { status, mountedDevices } from '$lib/stores/status';
 
 	interface Props {
 		partition: Partition;
@@ -13,7 +13,8 @@
 
 	let { partition, onRequestPassphrase }: Props = $props();
 
-	let mounting = $derived($disks.mountingDevice === partition.device);
+	let mounting = $derived($disks.mountingDevices.has(partition.device));
+	let alreadyMounted = $derived($mountedDevices.has(partition.device));
 	let isUnavailable = $derived(partition.mounted_by_system || !partition.supported);
 
 	// Storage key for per-drive options: prefer UUID, fall back to device path
@@ -201,7 +202,7 @@
 						type="checkbox"
 						checked={readOnly()}
 						onchange={toggleReadOnly}
-						disabled={mounting || $isMounted}
+						disabled={mounting || alreadyMounted}
 					/>
 					<span>RO</span>
 				</label>
@@ -209,8 +210,8 @@
 					<button
 						class="mount-btn"
 						onclick={handleMount}
-						disabled={mounting || $isMounted}
-						title={$isMounted ? 'Unmount current disk first' : 'Mount this partition'}
+						disabled={mounting || alreadyMounted}
+						title={alreadyMounted ? 'Already mounted' : 'Mount this partition'}
 					>
 						{#if mounting}
 							<span class="spinner"></span>
@@ -223,7 +224,7 @@
 						class="options-toggle-btn"
 						class:active={showOptions}
 						onclick={() => (showOptions = !showOptions)}
-						disabled={mounting || $isMounted}
+						disabled={mounting || alreadyMounted}
 						title="Mount options"
 					>+</button>
 				</div>
@@ -237,7 +238,7 @@
 				type="text"
 				bind:value={extraOptions}
 				placeholder="option1,option2"
-				disabled={mounting || $isMounted}
+				disabled={mounting || alreadyMounted}
 			/>
 			<div class="chips">
 				{#each quickChips as chip}
@@ -246,7 +247,7 @@
 							class="chip"
 							class:active={isChipActive(chip, extraOptions)}
 							onclick={() => toggleChip(chip)}
-							disabled={mounting || $isMounted}
+							disabled={mounting || alreadyMounted}
 						>{chip}</button>
 						<button
 							class="chip-remove"
