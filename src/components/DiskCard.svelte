@@ -5,7 +5,7 @@
 
 	interface Props {
 		partition: Partition;
-		onRequestPassphrase: (device: string, readOnly: boolean, extraOptions: string) => void;
+		onRequestPassphrase: (device: string, readOnly: boolean, extraOptions: string, ignorePermissions: boolean) => void;
 	}
 
 	const DEFAULT_CHIPS = ['noatime', 'nodiratime', 'nobarrier', 'compress-force=zstd:5'];
@@ -21,6 +21,31 @@
 	function storageKey(): string {
 		const id = partition.uuid || partition.device;
 		return `mountOptions:${id}`;
+	}
+
+	function ignorePermsKey(): string {
+		const id = partition.uuid || partition.device;
+		return `ignorePerms:${id}`;
+	}
+
+	function loadIgnorePerms(): boolean {
+		try {
+			return localStorage.getItem(ignorePermsKey()) === 'true';
+		} catch {
+			return false;
+		}
+	}
+
+	function saveIgnorePerms(val: boolean) {
+		try {
+			if (val) {
+				localStorage.setItem(ignorePermsKey(), 'true');
+			} else {
+				localStorage.removeItem(ignorePermsKey());
+			}
+		} catch {
+			// Ignore storage errors
+		}
 	}
 
 	// Load saved options for this drive
@@ -67,6 +92,7 @@
 	// Initialize state from localStorage
 	let savedOptions = loadSavedOptions();
 	let extraOptions = $state(savedOptions);
+	let ignorePermissions = $state(loadIgnorePerms());
 	let showOptions = $state(false);
 	let quickChips = $state(loadChips());
 	let addingChip = $state(false);
@@ -145,13 +171,14 @@
 
 		// Save the full options string (including ro) for this drive
 		saveOptions(extraOptions);
+		saveIgnorePerms(ignorePermissions);
 
 		if (partition.encrypted) {
-			onRequestPassphrase(partition.device, ro, opts);
+			onRequestPassphrase(partition.device, ro, opts, ignorePermissions);
 		} else {
-			const result = await disks.mount(partition.device, undefined, ro, opts);
+			const result = await disks.mount(partition.device, undefined, ro, opts, ignorePermissions);
 			if (result === 'encryption_required') {
-				onRequestPassphrase(partition.device, ro, opts);
+				onRequestPassphrase(partition.device, ro, opts, ignorePermissions);
 			} else {
 				status.refresh();
 			}
@@ -185,9 +212,9 @@
 					<span class="detail mount-point" title={partition.system_mount_point}>{partition.system_mount_point}</span>
 				{/if}
 			</div>
-			{#if extraOptions && !showOptions && !isUnavailable}
-				<div class="saved-options" title={extraOptions}>
-					<span class="saved-options-label">opts:</span> {extraOptions}
+			{#if (extraOptions || ignorePermissions) && !showOptions && !isUnavailable}
+				<div class="saved-options" title={[ignorePermissions ? '--ignore-permissions' : '', extraOptions].filter(Boolean).join(' ')}>
+					<span class="saved-options-label">opts:</span> {[ignorePermissions ? '--ignore-permissions' : '', extraOptions].filter(Boolean).join(' ')}
 				</div>
 			{/if}
 		</div>
@@ -233,6 +260,14 @@
 	</div>
 	{#if showOptions && !isUnavailable}
 		<div class="options-panel">
+			<label class="flag-toggle" title="Bypass Unix file permissions: files appear owned by the current macOS user (--ignore-permissions)">
+				<input
+					type="checkbox"
+					bind:checked={ignorePermissions}
+					disabled={mounting || alreadyMounted}
+				/>
+				<span>Ignore permissions</span>
+			</label>
 			<input
 				class="options-input"
 				type="text"
@@ -479,6 +514,23 @@
 
 	.options-toggle-btn:disabled {
 		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.flag-toggle {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 13px;
+		color: var(--text-secondary);
+		cursor: pointer;
+	}
+
+	.flag-toggle input {
+		cursor: pointer;
+	}
+
+	.flag-toggle input:disabled {
 		cursor: not-allowed;
 	}
 

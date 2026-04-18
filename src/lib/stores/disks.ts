@@ -64,7 +64,7 @@ function createDisksStore() {
 			currentAdminMode = enabled;
 			update((s) => ({ ...s, adminMode: enabled }));
 		},
-		async mount(device: string, passphrase?: string, readOnly?: boolean, extraOptions?: string): Promise<'success' | 'encryption_required' | 'error'> {
+		async mount(device: string, passphrase?: string, readOnly?: boolean, extraOptions?: string, ignorePermissions?: boolean): Promise<'success' | 'encryption_required' | 'error'> {
 			// Reject if this specific device is already being mounted
 			const current = get({ subscribe });
 			if (current.mountingDevices.has(device)) return 'error';
@@ -84,7 +84,7 @@ function createDisksStore() {
 				return { ...s, mountingDevices: devices, error: null, recentUnmount: false };
 			});
 			try {
-				await mountDisk(device, passphrase, readOnly, extraOptions);
+				await mountDisk(device, passphrase, readOnly, extraOptions, ignorePermissions);
 				logAction('Mount completed', { device });
 				update((s) => {
 					const devices = new Set(s.mountingDevices);

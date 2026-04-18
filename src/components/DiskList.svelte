@@ -38,6 +38,7 @@
 	let passphraseDevice: string | null = $state(null);
 	let passphraseReadOnly = $state(false);
 	let passphraseExtraOptions = $state('');
+	let passphraseIgnorePermissions = $state(false);
 	let passphraseError: string | null = $state(null);
 	let submittingPassphrase = $state(false);
 
@@ -58,10 +59,11 @@
 		};
 	});
 
-	function handleRequestPassphrase(device: string, readOnly: boolean, extraOptions: string) {
+	function handleRequestPassphrase(device: string, readOnly: boolean, extraOptions: string, ignorePermissions: boolean) {
 		passphraseDevice = device;
 		passphraseReadOnly = readOnly;
 		passphraseExtraOptions = extraOptions;
+		passphraseIgnorePermissions = ignorePermissions;
 		passphraseError = null;
 	}
 
@@ -72,7 +74,8 @@
 			const device = passphraseDevice;
 			const ro = passphraseReadOnly;
 			const extra = passphraseExtraOptions;
-			const result = await disks.mount(device, passphrase, ro, extra);
+			const ignorePerms = passphraseIgnorePermissions;
+			const result = await disks.mount(device, passphrase, ro, extra, ignorePerms);
 			if (result === 'success') {
 				passphraseDevice = null;
 				passphraseError = null;

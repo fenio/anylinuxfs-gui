@@ -517,7 +517,7 @@ fn parse_type_and_name(parts: &[&str]) -> (String, Option<String>) {
 }
 
 #[tauri::command]
-pub async fn mount_disk(app: AppHandle, device: String, passphrase: Option<String>, read_only: Option<bool>, extra_options: Option<String>) -> Result<String, String> {
+pub async fn mount_disk(app: AppHandle, device: String, passphrase: Option<String>, read_only: Option<bool>, extra_options: Option<String>, ignore_permissions: Option<bool>) -> Result<String, String> {
     // Validate device path before use
     validate_device_path(&device)?;
 
@@ -558,6 +558,9 @@ pub async fn mount_disk(app: AppHandle, device: String, passphrase: Option<Strin
 
         let result = {
             let mut args: Vec<&str> = vec!["mount"];
+            if ignore_permissions.unwrap_or(false) {
+                args.push("--ignore-permissions");
+            }
             if let Some(ref combined) = combined_options {
                 args.extend_from_slice(&["-o", combined]);
             }
