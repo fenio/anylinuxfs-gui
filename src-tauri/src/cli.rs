@@ -332,7 +332,7 @@ fn execute_with_sudo(args: &[&str], passphrase: Option<&str>, silent: bool) -> R
                     return Ok(stdout);
                 } else {
                     // Check for wrong password or cancelled
-                    if stderr.contains("Sorry, try again") || stderr.contains("incorrect password") {
+                    if stderr.contains("incorrect password") {
                         return Err("Incorrect password".to_string());
                     } else if stderr.contains("no askpass program") || stderr.contains("no password was provided") {
                         return Err("Authentication cancelled".to_string());
