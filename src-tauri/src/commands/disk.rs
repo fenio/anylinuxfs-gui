@@ -18,9 +18,8 @@ fn validate_device_path(device: &str) -> Result<(), String> {
     if device.contains("..") {
         return Err("Device path cannot contain '..'".to_string());
     }
-    if device.starts_with("/dev/") {
+    if let Some(suffix) = device.strip_prefix("/dev/") {
         // Normal device: only allow alphanumeric, dash, underscore after /dev/ prefix
-        let suffix = &device["/dev/".len()..];
         let valid_chars = suffix.chars().all(|c| {
             c.is_ascii_alphanumeric() || c == '-' || c == '_'
         });
@@ -495,8 +494,8 @@ fn parse_type_and_name(parts: &[&str]) -> (String, Option<String>) {
 
     // Check for multi-word types
     for type_name in &multi_word_types {
-        if joined.starts_with(type_name) {
-            let label_part = joined[type_name.len()..].trim();
+        if let Some(rest) = joined.strip_prefix(*type_name) {
+            let label_part = rest.trim();
             let label = if label_part.is_empty() { None } else { Some(label_part.to_string()) };
             return (type_name.to_string(), label);
         }

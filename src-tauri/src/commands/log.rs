@@ -127,7 +127,7 @@ pub fn get_log_content(lines: Option<usize>, file_path: Option<String>) -> Resul
         if let Ok(file) = File::open(log_path) {
             let reader = BufReader::new(file);
             let file_lines: Vec<String> = reader.lines()
-                .filter_map(|l| l.ok())
+                .map_while(Result::ok)
                 .collect();
             all_lines.extend(file_lines);
         }
@@ -218,7 +218,7 @@ pub fn start_log_stream(app: AppHandle) -> Result<(), String> {
                                         if file.seek(SeekFrom::Start(last_pos)).is_ok() {
                                             let reader = BufReader::new(&file);
                                             let lines: Vec<String> = reader.lines()
-                                                .filter_map(|l| l.ok())
+                                                .map_while(Result::ok)
                                                 .collect();
                                             if !lines.is_empty() {
                                                 let _ = app.emit("log-lines", lines);
@@ -230,7 +230,7 @@ pub fn start_log_stream(app: AppHandle) -> Result<(), String> {
                                         if file.seek(SeekFrom::Start(0)).is_ok() {
                                             let reader = BufReader::new(&file);
                                             let lines: Vec<String> = reader.lines()
-                                                .filter_map(|l| l.ok())
+                                                .map_while(Result::ok)
                                                 .collect();
                                             if !lines.is_empty() {
                                                 let _ = app.emit("log-lines", lines);

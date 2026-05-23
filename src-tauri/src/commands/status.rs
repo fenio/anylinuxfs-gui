@@ -115,7 +115,7 @@ pub struct MountInfo {
 
 #[tauri::command]
 pub async fn get_mount_status() -> Result<Vec<MountInfo>, String> {
-    tokio::task::spawn_blocking(|| get_mount_status_sync())
+    tokio::task::spawn_blocking(get_mount_status_sync)
         .await
         .map_err(|e| format!("Task error: {}", e))?
 }

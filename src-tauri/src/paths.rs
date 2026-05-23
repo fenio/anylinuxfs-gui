@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Get the socket path for communicating with anylinuxfs CLI
 /// Checks cache directory first, falls back to /tmp for compatibility
@@ -51,12 +51,12 @@ pub fn get_log_paths() -> Vec<PathBuf> {
 
     // Also check /tmp for legacy fallback
     let tmp_log = PathBuf::from("/tmp/anylinuxfs.log");
-    if tmp_log.exists() && log_dir != PathBuf::from("/tmp") {
+    if tmp_log.exists() && log_dir != Path::new("/tmp") {
         let mtime = std::fs::metadata(&tmp_log).and_then(|m| m.modified()).unwrap_or(std::time::UNIX_EPOCH);
         logs.push((tmp_log, mtime));
     }
 
-    logs.sort_by(|a, b| a.1.cmp(&b.1)); // oldest first (chronological)
+    logs.sort_by_key(|a| a.1); // oldest first (chronological)
     logs.into_iter().map(|(p, _)| p).collect()
 }
 

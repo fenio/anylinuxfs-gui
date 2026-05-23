@@ -117,13 +117,13 @@ const VALID_LOG_LEVELS: &[&str] = &["off", "error", "warn", "info", "debug", "tr
 pub async fn update_config(ram_mb: Option<u32>, vcpus: Option<u32>, log_level: Option<String>) -> Result<(), String> {
     // Validate inputs before running commands
     if let Some(ram) = ram_mb {
-        if ram < MIN_RAM_MB || ram > MAX_RAM_MB {
+        if !(MIN_RAM_MB..=MAX_RAM_MB).contains(&ram) {
             return Err(format!("Invalid RAM value: {}MB. Must be between {} and {} MB.", ram, MIN_RAM_MB, MAX_RAM_MB));
         }
     }
 
     if let Some(cpus) = vcpus {
-        if cpus < MIN_VCPUS || cpus > MAX_VCPUS {
+        if !(MIN_VCPUS..=MAX_VCPUS).contains(&cpus) {
             return Err(format!("Invalid vCPU value: {}. Must be between {} and {}.", cpus, MIN_VCPUS, MAX_VCPUS));
         }
     }

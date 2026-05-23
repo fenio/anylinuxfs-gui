@@ -5,18 +5,10 @@ use tauri::{AppHandle, Emitter};
 use crate::cli::get_path;
 use super::image::validate_image_name;
 
+#[derive(Default)]
 pub struct PtyState {
     writer: Option<Box<dyn Write + Send>>,
     master: Option<Box<dyn portable_pty::MasterPty + Send>>,
-}
-
-impl Default for PtyState {
-    fn default() -> Self {
-        Self {
-            writer: None,
-            master: None,
-        }
-    }
 }
 
 impl PtyState {
