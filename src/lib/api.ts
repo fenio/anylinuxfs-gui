@@ -132,31 +132,11 @@ export async function listCustomActions(): Promise<CustomAction[]> {
 }
 
 export async function createCustomAction(action: Omit<CustomAction, 'is_upstream'>): Promise<void> {
-	return await invoke<void>('create_custom_action', {
-		name: action.name,
-		description: action.description,
-		beforeMount: action.before_mount,
-		afterMount: action.after_mount,
-		beforeUnmount: action.before_unmount,
-		environment: action.environment,
-		captureEnvironment: action.capture_environment,
-		overrideNfsExport: action.override_nfs_export,
-		requiredOs: action.required_os
-	});
+	return await invoke<void>('create_custom_action', { action });
 }
 
 export async function updateCustomAction(action: Omit<CustomAction, 'is_upstream'>): Promise<void> {
-	return await invoke<void>('update_custom_action', {
-		name: action.name,
-		description: action.description,
-		beforeMount: action.before_mount,
-		afterMount: action.after_mount,
-		beforeUnmount: action.before_unmount,
-		environment: action.environment,
-		captureEnvironment: action.capture_environment,
-		overrideNfsExport: action.override_nfs_export,
-		requiredOs: action.required_os
-	});
+	return await invoke<void>('update_custom_action', { action });
 }
 
 export async function deleteCustomAction(name: string): Promise<void> {

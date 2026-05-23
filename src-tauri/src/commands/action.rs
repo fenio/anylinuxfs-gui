@@ -20,6 +20,19 @@ pub struct CustomAction {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct CustomActionInput {
+    pub name: String,
+    pub description: String,
+    pub before_mount: String,
+    pub after_mount: String,
+    pub before_unmount: String,
+    pub environment: Vec<String>,
+    pub capture_environment: Vec<String>,
+    pub override_nfs_export: String,
+    pub required_os: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct ActionConfig {
     #[serde(default)]
     description: String,
@@ -117,17 +130,7 @@ pub fn list_custom_actions() -> Result<Vec<CustomAction>, String> {
 }
 
 #[tauri::command]
-pub fn create_custom_action(
-    name: String,
-    description: String,
-    before_mount: String,
-    after_mount: String,
-    before_unmount: String,
-    environment: Vec<String>,
-    capture_environment: Vec<String>,
-    override_nfs_export: String,
-    required_os: String,
-) -> Result<(), String> {
+pub fn create_custom_action(action: CustomActionInput) -> Result<(), String> {
     let config_path = get_user_config_path();
 
     // Ensure config directory exists with secure permissions (0700)
@@ -153,27 +156,11 @@ pub fn create_custom_action(
         .ok_or("Invalid config format")?;
 
     // Check if action already exists
-    if custom_actions.contains_key(&name) {
-        return Err(format!("Action '{}' already exists", name));
+    if custom_actions.contains_key(&action.name) {
+        return Err(format!("Action '{}' already exists", action.name));
     }
 
-    // Create action table
-    let mut action_table = toml::Table::new();
-    action_table.insert("description".to_string(), toml::Value::String(description));
-    action_table.insert("before_mount".to_string(), toml::Value::String(before_mount));
-    action_table.insert("after_mount".to_string(), toml::Value::String(after_mount));
-    action_table.insert("before_unmount".to_string(), toml::Value::String(before_unmount));
-    action_table.insert(
-        "environment".to_string(),
-        toml::Value::Array(environment.into_iter().map(toml::Value::String).collect()),
-    );
-    action_table.insert(
-        "capture_environment".to_string(),
-        toml::Value::Array(capture_environment.into_iter().map(toml::Value::String).collect()),
-    );
-    action_table.insert("override_nfs_export".to_string(), toml::Value::String(override_nfs_export));
-    action_table.insert("required_os".to_string(), toml::Value::String(required_os));
-
+    let (name, action_table) = build_action_entry(action);
     custom_actions.insert(name, toml::Value::Table(action_table));
 
     // Write back with secure permissions
@@ -186,17 +173,7 @@ pub fn create_custom_action(
 }
 
 #[tauri::command]
-pub fn update_custom_action(
-    name: String,
-    description: String,
-    before_mount: String,
-    after_mount: String,
-    before_unmount: String,
-    environment: Vec<String>,
-    capture_environment: Vec<String>,
-    override_nfs_export: String,
-    required_os: String,
-) -> Result<(), String> {
+pub fn update_custom_action(action: CustomActionInput) -> Result<(), String> {
     let config_path = get_user_config_path();
 
     // Read existing config
@@ -214,27 +191,11 @@ pub fn update_custom_action(
         .ok_or("No custom_actions section found")?;
 
     // Check if action exists
-    if !custom_actions.contains_key(&name) {
-        return Err(format!("Action '{}' not found", name));
+    if !custom_actions.contains_key(&action.name) {
+        return Err(format!("Action '{}' not found", action.name));
     }
 
-    // Update action table
-    let mut action_table = toml::Table::new();
-    action_table.insert("description".to_string(), toml::Value::String(description));
-    action_table.insert("before_mount".to_string(), toml::Value::String(before_mount));
-    action_table.insert("after_mount".to_string(), toml::Value::String(after_mount));
-    action_table.insert("before_unmount".to_string(), toml::Value::String(before_unmount));
-    action_table.insert(
-        "environment".to_string(),
-        toml::Value::Array(environment.into_iter().map(toml::Value::String).collect()),
-    );
-    action_table.insert(
-        "capture_environment".to_string(),
-        toml::Value::Array(capture_environment.into_iter().map(toml::Value::String).collect()),
-    );
-    action_table.insert("override_nfs_export".to_string(), toml::Value::String(override_nfs_export));
-    action_table.insert("required_os".to_string(), toml::Value::String(required_os));
-
+    let (name, action_table) = build_action_entry(action);
     custom_actions.insert(name, toml::Value::Table(action_table));
 
     // Write back with secure permissions
@@ -244,6 +205,25 @@ pub fn update_custom_action(
     write_config_secure(&config_path, &new_content)?;
 
     Ok(())
+}
+
+fn build_action_entry(action: CustomActionInput) -> (String, toml::Table) {
+    let mut table = toml::Table::new();
+    table.insert("description".to_string(), toml::Value::String(action.description));
+    table.insert("before_mount".to_string(), toml::Value::String(action.before_mount));
+    table.insert("after_mount".to_string(), toml::Value::String(action.after_mount));
+    table.insert("before_unmount".to_string(), toml::Value::String(action.before_unmount));
+    table.insert(
+        "environment".to_string(),
+        toml::Value::Array(action.environment.into_iter().map(toml::Value::String).collect()),
+    );
+    table.insert(
+        "capture_environment".to_string(),
+        toml::Value::Array(action.capture_environment.into_iter().map(toml::Value::String).collect()),
+    );
+    table.insert("override_nfs_export".to_string(), toml::Value::String(action.override_nfs_export));
+    table.insert("required_os".to_string(), toml::Value::String(action.required_os));
+    (action.name, table)
 }
 
 #[tauri::command]
