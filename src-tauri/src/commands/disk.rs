@@ -401,6 +401,16 @@ fn parse_disk_list_output(output: &str) -> Result<DiskListResult, String> {
                             // For LVM, partition 0 is the VG scheme (not mountable)
                             if disk.disk_type == DiskType::Raid {
                                 disk.partitions.push(partition);
+                            } else if disk.disk_type == DiskType::Normal
+                                && !partition.filesystem.to_lowercase().contains("partition_scheme")
+                            {
+                                // Whole-disk filesystem with no partition table: the
+                                // index-0 entry IS the filesystem (e.g. whole-disk LUKS,
+                                // a "superfloppy" ext4/FAT), not a scheme container like
+                                // GUID_partition_scheme. Surface it as a mountable
+                                // partition instead of dropping the disk for having an
+                                // empty partition list. (issue #83)
+                                disk.partitions.push(partition);
                             }
                         } else {
                             disk.partitions.push(partition);
@@ -699,4 +709,58 @@ pub async fn force_cleanup() -> Result<String, String> {
     })
     .await
     .map_err(|e| format!("Task error: {}", e))?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Issue #83: a whole-disk filesystem with no partition table (here a
+    /// whole-disk LUKS volume) shows up only as the index-0 entry, whose
+    /// identifier is the whole disk itself. It must still be surfaced as a
+    /// mountable partition rather than dropped for having an empty list.
+    #[test]
+    fn whole_disk_filesystem_is_listed() {
+        let output = "\
+/dev/disk4 (external, physical):
+   #: TYPE NAME SIZE IDENTIFIER
+   0: crypto_LUKS *2.0 TB disk4
+";
+        let result = parse_disk_list_output(output).expect("parse should succeed");
+        assert_eq!(result.disks.len(), 1, "whole-disk LUKS must not be filtered out");
+
+        let disk = &result.disks[0];
+        assert_eq!(disk.device, "/dev/disk4");
+        assert!(disk.is_external);
+        assert_eq!(disk.size, "2.0 TB");
+
+        assert_eq!(disk.partitions.len(), 1, "the index-0 filesystem is the mountable entry");
+        let part = &disk.partitions[0];
+        assert_eq!(part.device, "/dev/disk4");
+        assert_eq!(part.filesystem, "crypto_LUKS");
+        assert!(part.encrypted);
+    }
+
+    /// Regression guard: on a partitioned disk the index-0 entry is the scheme
+    /// container (GUID_partition_scheme), which must NOT become a partition —
+    /// only the real partitions below it should be listed.
+    #[test]
+    fn partitioned_disk_skips_scheme_container() {
+        let output = "\
+/dev/disk6 (external, physical):
+   #: TYPE NAME SIZE IDENTIFIER
+   0: GUID_partition_scheme *64.0 GB disk6
+   1: EFI System EFI 209.7 MB disk6s1
+   2: ext4 linuxrootfs 63.5 GB disk6s5
+";
+        let result = parse_disk_list_output(output).expect("parse should succeed");
+        assert_eq!(result.disks.len(), 1);
+
+        let disk = &result.disks[0];
+        assert_eq!(disk.size, "64.0 GB", "disk size still comes from index 0");
+        assert_eq!(disk.partitions.len(), 2, "scheme container must not be listed");
+
+        let devices: Vec<&str> = disk.partitions.iter().map(|p| p.device.as_str()).collect();
+        assert_eq!(devices, vec!["/dev/disk6s1", "/dev/disk6s5"]);
+    }
 }
