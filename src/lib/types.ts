@@ -46,7 +46,6 @@ export type ElevationMode = 'native' | 'interactive_terminal';
 
 export interface ElevationPolicy {
 	mode: ElevationMode;
-	locked: boolean;
 }
 
 export type MountOutcome = 'mounted' | 'encryption_required' | 'cancelled' | 'timed_out' | 'failed';

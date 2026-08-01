@@ -165,6 +165,8 @@
 	}
 
 	async function handleMount() {
+		if ($elevation.loading || $elevation.saving) return;
+
 		// Split ro out of extraOptions for the backend API
 		const parts = optionParts();
 		const ro = parts.includes('ro');
@@ -230,7 +232,7 @@
 						type="checkbox"
 						checked={readOnly()}
 						onchange={toggleReadOnly}
-						disabled={mounting || alreadyMounted}
+						disabled={mounting || alreadyMounted || $elevation.loading || $elevation.saving}
 					/>
 					<span>RO</span>
 				</label>
@@ -238,7 +240,7 @@
 					<button
 						class="mount-btn"
 						onclick={handleMount}
-						disabled={mounting || alreadyMounted}
+						disabled={mounting || alreadyMounted || $elevation.loading || $elevation.saving}
 						title={alreadyMounted ? 'Already mounted' : 'Mount this partition'}
 					>
 						{#if mounting}
@@ -252,7 +254,7 @@
 						class="options-toggle-btn"
 						class:active={showOptions}
 						onclick={() => (showOptions = !showOptions)}
-						disabled={mounting || alreadyMounted}
+						disabled={mounting || alreadyMounted || $elevation.loading || $elevation.saving}
 						title="Mount options"
 					>+</button>
 				</div>

@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { status, isMounted } from '$lib/stores/status';
 	import { disks } from '$lib/stores/disks';
-	import { elevation } from '$lib/stores/elevation';
 	import { forceCleanup, setTrayUnmountEnabled } from '$lib/api';
 	import { Timeouts } from '$lib/constants';
 	import { logAction, logError } from '$lib/logger';
@@ -91,7 +90,7 @@
 					<span class="detail-item">{device}</span>
 				</div>
 			</div>
-			{#if $elevation.policy.mode === 'interactive_terminal'}
+			{#if $disks.cancellableMounts.has(device)}
 				<button
 					class="unmount-btn"
 					onclick={() => handleCancelMount(device)}

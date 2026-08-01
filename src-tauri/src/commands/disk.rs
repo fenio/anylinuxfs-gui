@@ -93,9 +93,9 @@ pub async fn list_disks(
     silent: bool,
 ) -> Result<DiskListResult, String> {
     let elevation_state = elevation_state.inner().clone();
-    let timeout_secs = if use_sudo
-        && elevation_state.mode() == ElevationMode::InteractiveTerminal
-    {
+    let operation_guard = elevation_state.begin_operation("list")?;
+    let elevation_mode = operation_guard.mode();
+    let timeout_secs = if use_sudo && elevation_mode == ElevationMode::InteractiveTerminal {
         INTERACTIVE_ELEVATION_TIMEOUT_SECS
     } else {
         COMMAND_TIMEOUT_SECS
@@ -110,6 +110,7 @@ pub async fn list_disks(
             use_sudo,
             None,
             silent,
+            elevation_mode,
             &list_elevation_state,
             TerminalInteraction::CaptureOutput {
                 operation: "list".to_string(),
@@ -598,9 +599,9 @@ pub async fn mount_disk(
     // Validate device path before use
     validate_device_path(&device)?;
     let elevation_state = elevation_state.inner().clone();
-    let elevation_mode = elevation_state.mode();
     let operation = format!("mount:{}", device);
-    let _operation_guard = elevation_state.begin_operation(operation.clone())?;
+    let operation_guard = elevation_state.begin_operation(operation.clone())?;
+    let elevation_mode = operation_guard.mode();
 
     // Sanitize extra_options with a whitelist to prevent command injection
     if let Some(ref opts) = extra_options {
@@ -661,6 +662,7 @@ pub async fn mount_disk(
                 true,
                 pass_ref,
                 false,
+                elevation_mode,
                 &mount_elevation_state,
                 TerminalInteraction::SecretPrompt {
                     operation: mount_operation,

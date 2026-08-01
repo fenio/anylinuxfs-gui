@@ -11,8 +11,7 @@ interface ElevationState {
 }
 
 const defaultPolicy: ElevationPolicy = {
-	mode: 'native',
-	locked: false
+	mode: 'native'
 };
 
 function createElevationStore() {

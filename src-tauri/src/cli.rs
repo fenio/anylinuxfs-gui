@@ -204,11 +204,12 @@ pub fn execute_command_with_elevation(
     needs_sudo: bool,
     passphrase: Option<&str>,
     silent: bool,
+    elevation_mode: ElevationMode,
     elevation_state: &ElevationState,
     terminal_interaction: TerminalInteraction,
 ) -> Result<String, CommandExecutionError> {
     if needs_sudo {
-        match elevation_state.mode() {
+        match elevation_mode {
             ElevationMode::Native => execute_with_sudo(args, passphrase, silent)
                 .map_err(|error| {
                     if error == "ALFS_SILENT_AUTH_EXPIRED" {

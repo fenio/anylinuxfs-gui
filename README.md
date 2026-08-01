@@ -60,11 +60,7 @@ Interactive mount commands use macOS `script -q /dev/null` as a bidirectional ps
 
 Interactive Terminal mode never opens a window for automatic background refreshes. With Admin mode enabled, click **Refresh** when disks are connected or removed. A pending mount can be cancelled from the GUI; the app terminates its Terminal handoff and requests device-specific cleanup. This mode does not bypass organizational policy: the privilege manager can still approve or deny each command.
 
-The Rust backend owns and persists the elevation setting. For a dedicated managed-Mac build, enable the enforcement feature to lock Interactive Terminal mode; no matching frontend build flag is required:
-
-```bash
-npx tauri build --features managed-terminal-elevation
-```
+The Rust backend owns and persists the elevation setting. It cannot be changed while a privileged operation is active, so the authentication and cancellation behavior remain stable until that operation finishes.
 
 ## Screenshots
 

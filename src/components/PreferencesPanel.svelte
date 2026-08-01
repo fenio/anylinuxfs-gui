@@ -2,6 +2,7 @@
 	import { enable, disable, isEnabled } from '@tauri-apps/plugin-autostart';
 	import { onMount } from 'svelte';
 	import { elevation } from '$lib/stores/elevation';
+	import { disks } from '$lib/stores/disks';
 	import type { ElevationMode } from '$lib/types';
 
 	let autoLaunch = $state(false);
@@ -48,7 +49,7 @@
 				id="elevation-mode"
 				value={$elevation.policy.mode}
 				onchange={changeElevationMode}
-				disabled={$elevation.policy.locked || $elevation.loading || $elevation.saving}
+				disabled={$elevation.loading || $elevation.saving || $disks.loading || $disks.mountingDevices.size > 0}
 			>
 				<option value="native">Native sudo (password or Touch ID)</option>
 				<option value="interactive_terminal">Interactive Terminal (managed Macs)</option>
@@ -61,9 +62,6 @@
 					Admin scans and mounts open a Terminal tab so interactive privilege-management software can show its approval workflow.
 					For encrypted disks, enter the LUKS passphrase in Terminal when <code>anylinuxfs</code> asks for it.
 				</p>
-				{#if $elevation.policy.locked}
-					<span class="hint">Interactive Terminal elevation is enforced by this managed build.</span>
-				{/if}
 				<span class="hint">Automatic disk changes do not open Terminal; click Refresh while Admin mode is enabled.</span>
 			{:else}
 				<span class="hint">Best for native macOS administrator accounts.</span>

@@ -11,6 +11,7 @@ interface DisksState {
 	loading: boolean;
 	error: string | null;
 	mountingDevices: Set<string>;
+	cancellableMounts: Set<string>;
 	mountingMessages: Map<string, string>;
 	adminMode: boolean;
 	hasSupportedPartitions: boolean;
@@ -26,6 +27,7 @@ function createDisksStore() {
 		loading: false,
 		error: null,
 		mountingDevices: new Set(),
+		cancellableMounts: new Set(),
 		mountingMessages: new Map(),
 		adminMode: false,
 		hasSupportedPartitions: true,
@@ -33,40 +35,54 @@ function createDisksStore() {
 	});
 
 	let unmountTimeout: ReturnType<typeof setTimeout> | null = null;
+	let refreshPromise: Promise<void> | null = null;
 
 	return {
 		subscribe,
 		async refresh(useSudo?: boolean, silent?: boolean) {
-			update((s) => ({ ...s, loading: true, error: null }));
-			try {
-				const adminMode = useSudo ?? currentAdminMode;
-				const result = await listDisks(adminMode, silent ?? false);
-				update((s) => ({
-					...s,
-					disks: result.disks,
-					hasSupportedPartitions: result.has_supported_partitions,
-					loading: false
-				}));
-			} catch (e) {
-				const rawError = String(e);
-				if (silent && rawError.includes('ALFS_SILENT_AUTH_EXPIRED')) {
-					if (get(elevation).policy.mode === 'interactive_terminal') {
-						// Managed elevation requires visible interaction. Keep the
-						// current list until the user explicitly clicks Refresh.
-						update((s) => ({ ...s, loading: false }));
-						return;
-					}
-					// Credentials expired during auto-refresh — disable admin mode quietly
-					currentAdminMode = false;
+			// Disk-watcher and user refreshes share one backend operation. Coalesce
+			// overlapping requests so a silent refresh cannot clear the loading state
+			// of a visible Terminal request or launch a duplicate Terminal session.
+			if (refreshPromise) return refreshPromise;
+
+			refreshPromise = (async () => {
+				update((s) => ({ ...s, loading: true, error: null }));
+				try {
+					const adminMode = useSudo ?? currentAdminMode;
+					const result = await listDisks(adminMode, silent ?? false);
 					update((s) => ({
 						...s,
-						adminMode: false,
-						loading: false,
-						error: 'Admin credentials expired. Re-enable Admin mode to authenticate again.'
+						disks: result.disks,
+						hasSupportedPartitions: result.has_supported_partitions,
+						loading: false
 					}));
-					return;
+				} catch (e) {
+					const rawError = String(e);
+					if (silent && rawError.includes('ALFS_SILENT_AUTH_EXPIRED')) {
+						if (get(elevation).policy.mode === 'interactive_terminal') {
+							// Interactive elevation requires visible interaction. Keep the
+							// current list until the user explicitly clicks Refresh.
+							update((s) => ({ ...s, loading: false }));
+							return;
+						}
+						// Credentials expired during auto-refresh — disable admin mode quietly
+						currentAdminMode = false;
+						update((s) => ({
+							...s,
+							adminMode: false,
+							loading: false,
+							error: 'Admin credentials expired. Re-enable Admin mode to authenticate again.'
+						}));
+						return;
+					}
+					update((s) => ({ ...s, error: parseError(e).message, loading: false }));
 				}
-				update((s) => ({ ...s, error: parseError(e).message, loading: false }));
+			})();
+
+			try {
+				await refreshPromise;
+			} finally {
+				refreshPromise = null;
 			}
 		},
 		setAdminMode(enabled: boolean) {
@@ -87,19 +103,23 @@ function createDisksStore() {
 			}
 
 			logAction('Mount started', { device });
+			const elevationMode = get(elevation).policy.mode;
 			update((s) => {
 				const devices = new Set(s.mountingDevices);
+				const cancellableMounts = new Set(s.cancellableMounts);
 				const messages = new Map(s.mountingMessages);
 				devices.add(device);
+				if (elevationMode === 'interactive_terminal') cancellableMounts.add(device);
 				messages.set(
 					device,
-					get(elevation).policy.mode === 'interactive_terminal'
+					elevationMode === 'interactive_terminal'
 						? 'Waiting for administrator approval and disk passphrase in Terminal…'
 						: 'Mounting…'
 				);
 				return {
 					...s,
 					mountingDevices: devices,
+					cancellableMounts,
 					mountingMessages: messages,
 					error: null,
 					recentUnmount: false
@@ -135,10 +155,12 @@ function createDisksStore() {
 			} finally {
 				update((s) => {
 					const devices = new Set(s.mountingDevices);
+					const cancellableMounts = new Set(s.cancellableMounts);
 					const messages = new Map(s.mountingMessages);
 					devices.delete(device);
+					cancellableMounts.delete(device);
 					messages.delete(device);
-					return { ...s, mountingDevices: devices, mountingMessages: messages };
+					return { ...s, mountingDevices: devices, cancellableMounts, mountingMessages: messages };
 				});
 			}
 		},
