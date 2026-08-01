@@ -1,6 +1,7 @@
 mod cache;
 mod cli;
 mod commands;
+mod elevation;
 mod error;
 mod paths;
 
@@ -13,8 +14,19 @@ use tauri::tray::TrayIconBuilder;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, AboutMetadataBuilder, SubmenuBuilder};
 use tauri_plugin_log::{Target, TargetKind};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+use elevation::{
+    cancel_elevation_operation, get_elevation_policy, set_elevation_mode, ElevationState,
+};
 
 struct UnmountMenuItem(tauri::menu::MenuItem<tauri::Wry>);
+
+fn cancel_pending_elevation(app: &tauri::AppHandle) {
+    let state = app.state::<Arc<ElevationState>>();
+    let cancelled = state.cancel_all_pending();
+    if cancelled > 0 {
+        log::info!("Requested cleanup for {} pending elevation operation(s)", cancelled);
+    }
+}
 
 #[cfg(target_os = "macos")]
 fn set_dock_visible(visible: bool) {
@@ -63,10 +75,12 @@ fn confirm_quit(app: &tauri::AppHandle) {
                 .buttons(MessageDialogButtons::OkCancelCustom("Quit".into(), "Cancel".into()))
                 .show(move |confirmed| {
                     if confirmed {
+                        cancel_pending_elevation(&app_clone);
                         app_clone.exit(0);
                     }
                 });
         } else {
+            cancel_pending_elevation(&app);
             app.exit(0);
         }
     });
@@ -96,6 +110,9 @@ pub fn run() {
         .manage(Arc::new(WatcherState::default()))
         .manage(Arc::new(Mutex::new(PtyState::default())))
         .setup(|app| {
+            let elevation_config = app.path().app_config_dir()?.join("preferences.toml");
+            app.manage(Arc::new(ElevationState::load(elevation_config)));
+
             let show_item = MenuItemBuilder::with_id("show", "Show").build(app)?;
             let unmount_item = MenuItemBuilder::with_id("unmount", "Unmount")
                 .enabled(false)
@@ -205,6 +222,7 @@ pub fn run() {
                 }
                 tauri::WindowEvent::Destroyed => {
                     let app = window.app_handle();
+                    cancel_pending_elevation(app);
                     // Stop watchers
                     let watcher_state = app.state::<Arc<WatcherState>>();
                     watcher_state.shutdown();
@@ -248,6 +266,9 @@ pub fn run() {
             update_custom_action,
             delete_custom_action,
             set_tray_unmount_enabled,
+            get_elevation_policy,
+            set_elevation_mode,
+            cancel_elevation_operation,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -42,6 +42,20 @@ export interface AppConfig {
 	log_level: string | null;
 }
 
+export type ElevationMode = 'native' | 'interactive_terminal';
+
+export interface ElevationPolicy {
+	mode: ElevationMode;
+	locked: boolean;
+}
+
+export type MountOutcome = 'mounted' | 'encryption_required' | 'cancelled' | 'timed_out' | 'failed';
+
+export interface MountCommandResult {
+	outcome: MountOutcome;
+	message: string | null;
+}
+
 export interface CliStatus {
 	available: boolean;
 	path: string;

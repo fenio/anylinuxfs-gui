@@ -7,6 +7,12 @@ edition = "2021"
 name = "anylinuxfs_gui_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+default = []
+# Build flavor for Macs whose privilege-management software only intercepts
+# interactive sudo commands launched from Terminal.
+managed-terminal-elevation = []
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Partition } from '$lib/types';
 	import { disks } from '$lib/stores/disks';
+	import { elevation } from '$lib/stores/elevation';
 	import { status, mountedDevices } from '$lib/stores/status';
 
 	interface Props {
@@ -173,13 +174,13 @@
 		saveOptions(extraOptions);
 		saveIgnorePerms(ignorePermissions);
 
-		if (partition.encrypted) {
+		if (partition.encrypted && $elevation.policy.mode !== 'interactive_terminal') {
 			onRequestPassphrase(partition.device, ro, opts, ignorePermissions);
 		} else {
 			const result = await disks.mount(partition.device, undefined, ro, opts, ignorePermissions);
 			if (result === 'encryption_required') {
 				onRequestPassphrase(partition.device, ro, opts, ignorePermissions);
-			} else {
+			} else if (result === 'success') {
 				status.refresh();
 			}
 		}
@@ -242,7 +243,7 @@
 					>
 						{#if mounting}
 							<span class="spinner"></span>
-							Mounting...
+							{$elevation.policy.mode === 'interactive_terminal' ? 'Waiting in Terminal…' : 'Mounting…'}
 						{:else}
 							Mount
 						{/if}

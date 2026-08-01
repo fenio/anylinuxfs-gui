@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { status, isMounted } from '$lib/stores/status';
 	import { disks } from '$lib/stores/disks';
+	import { elevation } from '$lib/stores/elevation';
 	import { forceCleanup, setTrayUnmountEnabled } from '$lib/api';
 	import { Timeouts } from '$lib/constants';
 	import { logAction, logError } from '$lib/logger';
@@ -35,6 +36,10 @@
 		}
 		cleaning = false;
 		status.refresh();
+	}
+
+	async function handleCancelMount(device: string) {
+		await disks.cancelMount(device);
 	}
 </script>
 
@@ -81,11 +86,20 @@
 				<span class="sr-only">Loading</span>
 			</div>
 			<div class="status-info">
-				<div class="status-label">Mounting...</div>
+				<div class="status-label">{$disks.mountingMessages.get(device) || 'Mounting…'}</div>
 				<div class="status-details">
 					<span class="detail-item">{device}</span>
 				</div>
 			</div>
+			{#if $elevation.policy.mode === 'interactive_terminal'}
+				<button
+					class="unmount-btn"
+					onclick={() => handleCancelMount(device)}
+					disabled={$disks.mountingMessages.get(device)?.startsWith('Cancelling')}
+				>
+					{$disks.mountingMessages.get(device)?.startsWith('Cancelling') ? 'Cancelling…' : 'Cancel'}
+				</button>
+			{/if}
 		</div>
 	{/each}
 {/if}
