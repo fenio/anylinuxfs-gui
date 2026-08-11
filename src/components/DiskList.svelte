@@ -82,7 +82,7 @@
 				status.refresh();
 			} else if (result === 'encryption_required') {
 				// Wrong passphrase — keep dialog open with error
-				passphraseError = 'Incorrect passphrase. Please try again.';
+				passphraseError = 'Incorrect passphrase or recovery key. Please try again.';
 			} else {
 				// Other error — close dialog, error shown in main banner
 				passphraseDevice = null;

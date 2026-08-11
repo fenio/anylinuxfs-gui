@@ -248,7 +248,7 @@ fn is_linux_native_fs(fs: &str) -> bool {
         || fs_lower.contains("btrfs") || fs_lower.contains("xfs") || fs_lower.contains("f2fs")
         || fs_lower.contains("reiserfs") || fs_lower.contains("zfs")
         || fs_lower.contains("ntfs") || fs_lower.contains("exfat")
-        || fs_lower.contains("luks")
+        || fs_lower.contains("luks") || fs_lower.contains("bitlocker")
         || fs_lower.contains("lvm") || fs_lower.contains("raid")
         || fs_lower == "linux filesystem"
 }
@@ -264,9 +264,9 @@ fn check_filesystem_support(fs: &str) -> (bool, Option<String>) {
         return (true, None);
     }
 
-    // LUKS encrypted partitions — supported, passphrase will be requested at mount time
-    if fs_lower.contains("luks") {
-        return (true, Some("Encrypted (passphrase required)".to_string()));
+    // Encrypted partitions are supported; an unlock key is requested at mount time.
+    if fs_lower.contains("luks") || fs_lower.contains("bitlocker") {
+        return (true, Some("Encrypted (unlock key required)".to_string()));
     }
 
     // RAID/LVM member partitions — not directly mountable, use admin mode for actual volumes
@@ -762,5 +762,33 @@ mod tests {
 
         let devices: Vec<&str> = disk.partitions.iter().map(|p| p.device.as_str()).collect();
         assert_eq!(devices, vec!["/dev/disk6s1", "/dev/disk6s5"]);
+    }
+
+    /// Issue #133: the CLI identifies BitLocker directly, so diskutil's
+    /// misleading MS-DOS personality must not replace or disable it.
+    #[test]
+    fn bitlocker_partitions_are_encrypted_and_mountable() {
+        let output = "\
+/dev/disk6 (external, physical):
+   #:                       TYPE NAME                    SIZE       IDENTIFIER
+   0:      GUID_partition_scheme                        *2.0 TB     disk6
+   3:                  BitLocker Workstation Window...   706.4 GB   disk6s3
+   4:       Microsoft Basic Data Sharing                 104.9 GB   disk6s4
+   5:                  BitLocker Workstation Data 2...    1.2 TB     disk6s5
+";
+        let result = parse_disk_list_output(output).expect("parse should succeed");
+        let bitlocker: Vec<&Partition> = result.disks[0]
+            .partitions
+            .iter()
+            .filter(|partition| partition.filesystem == "BitLocker")
+            .collect();
+
+        assert_eq!(bitlocker.len(), 2);
+        assert!(bitlocker.iter().all(|partition| partition.encrypted));
+        assert!(is_linux_native_fs("BitLocker"));
+        assert_eq!(
+            check_filesystem_support("BitLocker"),
+            (true, Some("Encrypted (unlock key required)".to_string()))
+        );
     }
 }

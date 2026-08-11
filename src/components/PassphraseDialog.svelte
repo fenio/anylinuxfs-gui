@@ -42,7 +42,7 @@
 <div class="overlay" role="dialog" aria-modal="true" tabindex="-1" onkeydown={handleKeydown}>
 	<div class="dialog">
 		<div class="dialog-header">
-			<h3>Enter Passphrase</h3>
+			<h3>Unlock Encrypted Partition</h3>
 		</div>
 		<div class="dialog-body">
 			<p class="device-info">
@@ -52,14 +52,14 @@
 				<p class="passphrase-error" role="alert">{errorMessage}</p>
 			{/if}
 			<form onsubmit={handleSubmit}>
-				<label for="passphrase">Passphrase</label>
+				<label for="passphrase">Passphrase or recovery key</label>
 				<div class="input-wrapper">
 					<input
 						bind:this={inputEl}
 						id="passphrase"
 						type={showPassphrase ? 'text' : 'password'}
 						bind:value={passphrase}
-						placeholder="Enter encryption passphrase"
+						placeholder="Enter passphrase or recovery key"
 						autocomplete="off"
 						autocorrect="off"
 						spellcheck="false"
