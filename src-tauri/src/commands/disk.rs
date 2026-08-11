@@ -695,7 +695,7 @@ pub async fn mount_disk(
         }
 
         // Check if mount command finished with an error
-        if let Some(ref result) = *mount_result.lock().unwrap() {
+        let mount_command_succeeded = if let Some(ref result) = *mount_result.lock().unwrap() {
             let output_text = match result {
                 Ok(out) => out.clone(),
                 Err(error) => error.message(),
@@ -731,11 +731,15 @@ pub async fn mount_disk(
                     other => MountCommandResult::new(MountOutcome::Failed, other.message()),
                 });
             }
-        }
+            true
+        } else {
+            false
+        };
 
         // Check if this specific device appeared in `anylinuxfs status`
-        if check_device_mounted(&device) {
-            elevation_state.mark_mount_persistent(&device);
+        if check_device_mounted(&device)
+            && (mount_command_succeeded || elevation_state.mark_mount_persistent(&device))
+        {
             let _ = app.emit("status-changed", ());
             return Ok(MountCommandResult::new(
                 MountOutcome::Mounted,

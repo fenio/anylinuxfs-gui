@@ -69,6 +69,7 @@ struct TerminalSession {
     status_path: PathBuf,
     cli_path: PathBuf,
     persistent_mount: bool,
+    cancellation_started: bool,
 }
 
 pub struct ElevationState {
@@ -157,6 +158,13 @@ impl ElevationState {
         cli_path: PathBuf,
     ) -> (u64, bool) {
         let id = self.next_session_id.fetch_add(1, Ordering::Relaxed);
+        // Hold cancellation requests through insertion so a request either
+        // marks this session now or finds it in `cancel_matching` afterward.
+        let mut cancellation_requests = self
+            .cancellation_requests
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let cancellation_requested = cancellation_requests.remove(&operation);
         let session = TerminalSession {
             operation: operation.clone(),
             cancel_path,
@@ -165,22 +173,18 @@ impl ElevationState {
             status_path,
             cli_path,
             persistent_mount: false,
+            cancellation_started: cancellation_requested,
         };
         self.sessions
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .insert(id, session.clone());
+        drop(cancellation_requests);
 
-        // A UI cancellation can arrive after mount_disk starts but just before
-        // Terminal registration. Consume that request here so no command is
-        // launched after the user has cancelled it.
-        let cancellation_requested = self
-            .cancellation_requests
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .remove(&operation);
         if cancellation_requested {
-            cancel_terminal_session(&session);
+            // The command has not been launched yet, so only mark the handoff
+            // cancelled. Stopping the device here could affect an older mount.
+            cancel_terminal_session(&session, false);
         }
         (id, cancellation_requested)
     }
@@ -192,18 +196,36 @@ impl ElevationState {
             .remove(&id);
     }
 
-    pub fn mark_mount_persistent(&self, device: &str) {
+    pub fn mark_mount_persistent(&self, device: &str) -> bool {
         let operation = format!("mount:{}", device);
-        for session in self
+        let cancellation_requests = self
+            .cancellation_requests
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if cancellation_requests.contains(&operation) {
+            return false;
+        }
+        let mut sessions = self
             .sessions
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .values_mut()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some((_, session)) = sessions
+            .iter_mut()
+            .filter(|(_, session)| session.operation == operation)
+            .max_by_key(|(id, _)| **id)
         {
-            if session.operation == operation {
-                session.persistent_mount = true;
+            if session.cancellation_started {
+                return false;
             }
+            session.persistent_mount = true;
+            return true;
         }
+        drop(sessions);
+        drop(cancellation_requests);
+
+        // Native elevation has no Terminal session to preserve. Interactive
+        // callers must separately prove that a completed command succeeded.
+        self.mode() != ElevationMode::InteractiveTerminal
     }
 
     pub fn begin_operation(
@@ -280,20 +302,29 @@ impl ElevationState {
         self.cancel_matching(None, false)
     }
 
-    fn cancel_session(&self, id: u64) -> bool {
-        let session = self
+    /// Returns true when a confirmed mount must be preserved. The persistence
+    /// check and session snapshot share one lock so timeout cleanup cannot race
+    /// `mark_mount_persistent` after observing a stale value.
+    fn cancel_session_for_timeout(&self, id: u64) -> bool {
+        let mut sessions = self
             .sessions
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .get(&id)
-            .cloned();
-
-        if let Some(session) = session {
-            cancel_terminal_session(&session);
-            true
-        } else {
-            false
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let Some(session) = sessions.get_mut(&id) else {
+            return false;
+        };
+        if session.persistent_mount {
+            return true;
         }
+        if session.cancellation_started {
+            return false;
+        }
+        session.cancellation_started = true;
+        let session = session.clone();
+        drop(sessions);
+
+        cancel_terminal_session(&session, true);
+        false
     }
 
     fn cancel_matching(&self, operation: Option<&str>, include_persistent: bool) -> usize {
@@ -301,18 +332,24 @@ impl ElevationState {
             .sessions
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .values()
-            .filter(|session| {
-                (include_persistent || !session.persistent_mount)
+            .values_mut()
+            .filter_map(|session| {
+                if (include_persistent || !session.persistent_mount)
+                    && !session.cancellation_started
                     && operation
                         .map(|value| value == session.operation.as_str())
                         .unwrap_or(true)
+                {
+                    session.cancellation_started = true;
+                    Some(session.clone())
+                } else {
+                    None
+                }
             })
-            .cloned()
             .collect();
 
         for session in &sessions {
-            cancel_terminal_session(session);
+            cancel_terminal_session(session, true);
         }
         sessions.len()
     }
@@ -381,8 +418,17 @@ fn terminal_script_content(
         r#"#!/bin/zsh
 /usr/bin/printf '%s\n' "$$" > {pid_temp_path}
 /bin/mv -f {pid_temp_path} {pid_path}
-/usr/bin/printf '%s\n' "launched" > {launch_ack_temp_path}
-/bin/mv -f {launch_ack_temp_path} {launch_ack_path}
+start_gate_owned=0
+acquire_start_gate() {{
+  while ! /bin/mkdir {start_gate_path} 2>/dev/null; do /bin/sleep 0.01; done
+  start_gate_owned=1
+}}
+release_start_gate() {{
+  if [[ "$start_gate_owned" == "1" ]]; then
+    /bin/rmdir {start_gate_path} 2>/dev/null
+    start_gate_owned=0
+  fi
+}}
 restore_terminal_echo() {{ /bin/stty echo 2>/dev/null }}
 finish_terminal() {{
   command_status="$1"
@@ -390,18 +436,24 @@ finish_terminal() {{
   [[ -e {cancel_path} ]] && completion="cancelled"
   /usr/bin/printf '%s\n%s\n' "$command_status" "$completion" > {status_temp_path}
   /bin/mv -f {status_temp_path} {status_path}
+  release_start_gate
   restore_terminal_echo
 }}
 trap 'finish_terminal 130; exit 130' HUP INT TERM
+acquire_start_gate
 if [[ -e {cancel_path} ]]; then
   finish_terminal 130
   exit 130
 fi
+/usr/bin/printf '%s\n' "command-starting" > {launch_ack_temp_path}
+/bin/mv -f {launch_ack_temp_path} {launch_ack_path}
+release_start_gate
 "#,
         pid_path = shell_quote(&pid_path.to_string_lossy()),
         pid_temp_path = shell_quote(&format!("{}.tmp", pid_path.to_string_lossy())),
         launch_ack_path = shell_quote(&launch_ack_path.to_string_lossy()),
         launch_ack_temp_path = shell_quote(&format!("{}.tmp", launch_ack_path.to_string_lossy())),
+        start_gate_path = shell_quote(&cancel_path.with_file_name("start-gate").to_string_lossy()),
         cancel_path = shell_quote(&cancel_path.to_string_lossy()),
         status_path = shell_quote(&status_path.to_string_lossy()),
         status_temp_path = shell_quote(&format!("{}.tmp", status_path.to_string_lossy())),
@@ -589,38 +641,60 @@ fn wait_for_terminal_result(
             return Err(TerminalExecutionError::Cancelled);
         }
         if start.elapsed() > timeout {
-            state.cancel_session(session_id);
+            if state.cancel_session_for_timeout(session_id) {
+                // The mount is already available to the user. Its detached VM
+                // can still be a descendant if the CLI parent is hung, so do
+                // not signal this hierarchy or request device cleanup.
+                return Ok(fs::read_to_string(output_path).unwrap_or_default());
+            }
             return Err(TerminalExecutionError::TimedOut);
         }
         std::thread::sleep(Duration::from_millis(100));
     }
 }
 
-fn cancel_terminal_session(session: &TerminalSession) {
+fn cancel_terminal_session(session: &TerminalSession, cleanup_mount: bool) {
+    // Serialize the cancel marker with the script's final pre-command check.
+    // Whichever side acquires the gate first determines whether the command is
+    // committed to start and therefore whether device cleanup is appropriate.
+    let start_gate_path = session.cancel_path.with_file_name("start-gate");
+    let gate_acquired = acquire_start_gate(&start_gate_path, Duration::from_secs(1));
     if let Err(error) = fs::write(&session.cancel_path, b"cancelled\n") {
         log::warn!("Failed to mark Terminal session cancelled: {}", error);
     }
-
-    if let Ok(pid_text) = fs::read_to_string(&session.pid_path) {
-        if let Ok(pid) = pid_text.trim().parse::<u32>() {
-            if pid > 1 {
-                let _ = Command::new("/usr/bin/pkill")
-                    .args(["-TERM", "-P", &pid.to_string()])
-                    .status();
-                let _ = Command::new("/bin/kill")
-                    .args(["-TERM", &pid.to_string()])
-                    .status();
-            }
-        }
+    let command_started = session.launch_ack_path.exists();
+    if gate_acquired {
+        let _ = fs::remove_dir(&start_gate_path);
     }
 
-    if let Some(device) = session.operation.strip_prefix("mount:") {
-        let _ = Command::new(&session.cli_path)
-            .args(["stop", device])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn();
+    if let Some(pid) = read_session_pid(&session.pid_path).filter(|pid| *pid > 1) {
+        terminate_process_tree(session, pid);
+    }
+
+    if cleanup_mount && command_started {
+        if let Some(device) = session.operation.strip_prefix("mount:") {
+            request_device_cleanup(session, device);
+        }
+    }
+}
+
+fn acquire_start_gate(path: &Path, timeout: Duration) -> bool {
+    let deadline = Instant::now() + timeout;
+    loop {
+        match fs::create_dir(path) {
+            Ok(()) => return true,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                if Instant::now() >= deadline {
+                    log::warn!("Timed out waiting for Terminal command start gate");
+                    return false;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            Err(error) => {
+                log::warn!("Failed to acquire Terminal command start gate: {}", error);
+                return false;
+            }
+        }
     }
 }
 
@@ -652,23 +726,7 @@ fn ensure_terminal_session_stopped(state: &ElevationState, id: u64) {
         return;
     }
 
-    for _ in 0..20 {
-        if !process_exists(pid) {
-            return;
-        }
-        std::thread::sleep(Duration::from_millis(100));
-    }
-
-    log::warn!(
-        "Terminal elevation shell {} did not stop after cancellation; forcing termination",
-        pid
-    );
-    let _ = Command::new("/usr/bin/pkill")
-        .args(["-KILL", "-P", &pid.to_string()])
-        .status();
-    let _ = Command::new("/bin/kill")
-        .args(["-KILL", &pid.to_string()])
-        .status();
+    terminate_process_tree(&session, pid);
 }
 
 fn read_session_pid(path: &Path) -> Option<u32> {
@@ -688,14 +746,164 @@ fn wait_for_terminal_session_pid(session: &TerminalSession, timeout: Duration) -
     }
 }
 
-fn process_exists(pid: u32) -> bool {
-    Command::new("/bin/kill")
-        .args(["-0", &pid.to_string()])
+fn child_process_ids(parent_pid: u32) -> Vec<u32> {
+    let output = Command::new("/usr/bin/pgrep")
+        .args(["-P", &parent_pid.to_string()])
+        .output();
+    let Ok(output) = output else {
+        return Vec::new();
+    };
+
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| line.trim().parse::<u32>().ok())
+        .filter(|pid| *pid > 1)
+        .collect()
+}
+
+fn process_tree(root_pid: u32) -> Vec<u32> {
+    fn collect(pid: u32, seen: &mut HashSet<u32>, result: &mut Vec<u32>) {
+        for child in child_process_ids(pid) {
+            if seen.insert(child) {
+                collect(child, seen, result);
+                result.push(child);
+            }
+        }
+    }
+
+    let mut seen = HashSet::from([root_pid]);
+    let mut result = Vec::new();
+    collect(root_pid, &mut seen, &mut result);
+    result.push(root_pid);
+    result
+}
+
+fn signal_processes(pids: &[u32], signal: &str) {
+    for pid in pids {
+        let _ = Command::new("/bin/kill")
+            .args([signal, &pid.to_string()])
+            .status();
+    }
+}
+
+fn process_identity(pid: u32) -> Option<String> {
+    let output = Command::new("/bin/ps")
+        .args(["-p", &pid.to_string(), "-o", "lstart=", "-o", "command="])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let identity = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    (!identity.is_empty()).then_some(identity)
+}
+
+fn recorded_terminal_shell_matches(session: &TerminalSession, pid: u32) -> bool {
+    let Some(work_dir) = session.pid_path.parent() else {
+        return false;
+    };
+    let expected_script = work_dir.join("run-anylinuxfs.command");
+    let output = Command::new("/bin/ps")
+        .args(["-p", &pid.to_string(), "-o", "command="])
+        .output();
+    let Ok(output) = output else {
+        return false;
+    };
+    String::from_utf8_lossy(&output.stdout).contains(expected_script.to_string_lossy().as_ref())
+}
+
+fn terminate_process_tree(session: &TerminalSession, root_pid: u32) {
+    if root_pid <= 1 {
+        return;
+    }
+    if !recorded_terminal_shell_matches(session, root_pid) {
+        log::warn!(
+            "Refusing to terminate stale or unexpected Terminal shell PID {}",
+            root_pid
+        );
+        return;
+    }
+
+    // Snapshot descendants before terminating their parents so reparenting
+    // cannot make deeper `script`/`sudo`/CLI processes invisible to cleanup.
+    let pids = process_tree(root_pid);
+    let identities: Vec<(u32, String)> = pids
+        .iter()
+        .filter_map(|pid| process_identity(*pid).map(|identity| (*pid, identity)))
+        .collect();
+    signal_processes(&pids, "-TERM");
+
+    let deadline = Instant::now() + Duration::from_millis(500);
+    while Instant::now() < deadline {
+        if identities
+            .iter()
+            .all(|(pid, identity)| process_identity(*pid).as_ref() != Some(identity))
+        {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    let remaining: Vec<u32> = identities
+        .iter()
+        .filter_map(|(pid, identity)| {
+            (process_identity(*pid).as_ref() == Some(identity)).then_some(*pid)
+        })
+        .collect();
+    if remaining.is_empty() {
+        return;
+    }
+
+    log::warn!(
+        "{} Terminal elevation process(es) ignored cancellation; forcing termination",
+        remaining.len()
+    );
+    signal_processes(&remaining, "-KILL");
+}
+
+fn request_device_cleanup(session: &TerminalSession, device: &str) {
+    let child = Command::new(&session.cli_path)
+        .args(["stop", device])
+        .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
-        .status()
-        .map(|status| status.success())
-        .unwrap_or(false)
+        .spawn();
+    let Ok(mut child) = child else {
+        log::warn!("Failed to start cleanup for cancelled mount {}", device);
+        return;
+    };
+
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                if !status.success() {
+                    log::warn!(
+                        "Cleanup for cancelled mount {} failed with status {}",
+                        device,
+                        status
+                    );
+                }
+                return;
+            }
+            Ok(None) if Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            Ok(None) => {
+                log::warn!("Cleanup for cancelled mount {} timed out", device);
+                let _ = child.kill();
+                let _ = child.wait();
+                return;
+            }
+            Err(error) => {
+                log::warn!(
+                    "Failed while waiting for cancelled mount {} cleanup: {}",
+                    device,
+                    error
+                );
+                return;
+            }
+        }
+    }
 }
 
 #[tauri::command]
@@ -767,9 +975,10 @@ mod tests {
         assert!(script.contains("/bin/mv -f '/tmp/launched.tmp' '/tmp/launched'"));
         assert!(script.contains("/bin/mv -f '/tmp/status.txt.tmp' '/tmp/status.txt'"));
         assert!(script.contains("finish_terminal 130; exit 130"));
-        assert!(script.contains(
-            "if [[ -e '/tmp/cancel' ]]; then\n  finish_terminal 130\n  exit 130\nfi\n/bin/stty -echo"
-        ));
+        let cancel_check = script.find("if [[ -e '/tmp/cancel' ]]").unwrap();
+        let command_start = script.find("command-starting").unwrap();
+        let secret_prompt = script.find("/bin/stty -echo").unwrap();
+        assert!(cancel_check < command_start && command_start < secret_prompt);
         assert!(!script.contains("/usr/bin/tee"));
     }
 
@@ -819,7 +1028,7 @@ mod tests {
         let result = Command::new("/bin/zsh").arg(&script_path).output().unwrap();
         assert_eq!(result.status.code(), Some(130));
         assert!(!command_marker.exists());
-        assert!(launch_ack_path.exists());
+        assert!(!launch_ack_path.exists());
         assert_eq!(fs::read_to_string(status_path).unwrap(), "130\ncancelled\n");
     }
 
@@ -835,6 +1044,7 @@ mod tests {
             status_path: directory.path().join("status"),
             cli_path: PathBuf::from("/missing/anylinuxfs"),
             persistent_mount: false,
+            cancellation_started: false,
         };
         let writer = std::thread::spawn(move || {
             std::thread::sleep(Duration::from_millis(75));
@@ -846,6 +1056,137 @@ mod tests {
             Some(4242)
         );
         writer.join().unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn cancellation_terminates_nested_processes() {
+        let directory = tempfile::tempdir().unwrap();
+        let script_path = directory.path().join("run-anylinuxfs.command");
+        fs::write(
+            &script_path,
+            b"#!/bin/sh\ntrap '' TERM\n/bin/sleep 30 & wait\n",
+        )
+        .unwrap();
+        let session = TerminalSession {
+            operation: "list".to_string(),
+            cancel_path: directory.path().join("cancel"),
+            pid_path: directory.path().join("shell.pid"),
+            launch_ack_path: directory.path().join("launched"),
+            status_path: directory.path().join("status"),
+            cli_path: PathBuf::from("/missing/anylinuxfs"),
+            persistent_mount: false,
+            cancellation_started: false,
+        };
+        let mut shell = Command::new("/bin/sh")
+            .arg(&script_path)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let shell_pid = shell.id();
+
+        let descendants = (0..20)
+            .find_map(|_| {
+                let descendants = child_process_ids(shell_pid);
+                if descendants.is_empty() {
+                    std::thread::sleep(Duration::from_millis(25));
+                    None
+                } else {
+                    Some(descendants)
+                }
+            })
+            .expect("nested process should start");
+
+        assert!(recorded_terminal_shell_matches(&session, shell_pid));
+        terminate_process_tree(&session, shell_pid);
+        let _ = shell.wait();
+        for pid in std::iter::once(shell_pid).chain(descendants) {
+            let state = Command::new("/bin/ps")
+                .args(["-p", &pid.to_string(), "-o", "stat="])
+                .output()
+                .unwrap();
+            let state = String::from_utf8_lossy(&state.stdout);
+            assert!(state.trim().is_empty() || state.trim().starts_with('Z'));
+        }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn cancelled_mount_waits_for_device_cleanup() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = tempfile::tempdir().unwrap();
+        let cleanup_marker = directory.path().join("cleanup-finished");
+        let cli_path = directory.path().join("fake-anylinuxfs");
+        fs::write(
+            &cli_path,
+            format!(
+                "#!/bin/sh\n/bin/sleep 0.1\n/usr/bin/touch {}\n",
+                shell_quote(&cleanup_marker.to_string_lossy())
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(&cli_path, fs::Permissions::from_mode(0o700)).unwrap();
+        let session = TerminalSession {
+            operation: "mount:/dev/disk7".to_string(),
+            cancel_path: directory.path().join("cancel"),
+            pid_path: directory.path().join("missing.pid"),
+            launch_ack_path: directory.path().join("launched"),
+            status_path: directory.path().join("status"),
+            cli_path,
+            persistent_mount: false,
+            cancellation_started: false,
+        };
+        fs::write(&session.launch_ack_path, b"launched\n").unwrap();
+
+        cancel_terminal_session(&session, true);
+        assert!(cleanup_marker.exists());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn cancellation_waits_for_command_start_decision() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = tempfile::tempdir().unwrap();
+        let cleanup_marker = directory.path().join("cleanup-finished");
+        let cli_path = directory.path().join("fake-anylinuxfs");
+        fs::write(
+            &cli_path,
+            format!(
+                "#!/bin/sh\n/usr/bin/touch {}\n",
+                shell_quote(&cleanup_marker.to_string_lossy())
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(&cli_path, fs::Permissions::from_mode(0o700)).unwrap();
+        let session = TerminalSession {
+            operation: "mount:/dev/disk7".to_string(),
+            cancel_path: directory.path().join("cancel"),
+            pid_path: directory.path().join("missing.pid"),
+            launch_ack_path: directory.path().join("launched"),
+            status_path: directory.path().join("status"),
+            cli_path,
+            persistent_mount: false,
+            cancellation_started: false,
+        };
+        let start_gate_path = directory.path().join("start-gate");
+        fs::create_dir(&start_gate_path).unwrap();
+
+        let cancelling_session = session.clone();
+        let cancellation =
+            std::thread::spawn(move || cancel_terminal_session(&cancelling_session, true));
+        std::thread::sleep(Duration::from_millis(50));
+        assert!(!session.cancel_path.exists());
+
+        fs::write(&session.launch_ack_path, b"command-starting\n").unwrap();
+        fs::remove_dir(start_gate_path).unwrap();
+        cancellation.join().unwrap();
+
+        assert!(session.cancel_path.exists());
+        assert!(cleanup_marker.exists());
     }
 
     #[test]
@@ -923,6 +1264,58 @@ mod tests {
     }
 
     #[test]
+    fn persistent_mount_timeout_does_not_cancel_processes() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = ElevationState::load(directory.path().join("preferences.toml"));
+        let cancel_path = directory.path().join("cancel");
+        let status_path = directory.path().join("status");
+        fs::write(&status_path, b"pending\n").unwrap();
+        let (session_id, _) = state.register_session(
+            "mount:/dev/disk7".to_string(),
+            cancel_path.clone(),
+            directory.path().join("missing.pid"),
+            directory.path().join("launched"),
+            status_path.clone(),
+            PathBuf::from("/missing/anylinuxfs"),
+        );
+        assert!(state.mark_mount_persistent("/dev/disk7"));
+
+        let result = wait_for_terminal_result(
+            &state,
+            session_id,
+            &status_path,
+            &directory.path().join("output"),
+            &cancel_path,
+            Duration::from_millis(1),
+        );
+
+        assert_eq!(result.unwrap(), "");
+        assert!(!cancel_path.exists());
+        state.unregister_session(session_id);
+        assert_eq!(state.active_session_count(), 0);
+    }
+
+    #[test]
+    fn timeout_cancellation_cannot_be_overwritten_by_persistence() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = ElevationState::load(directory.path().join("preferences.toml"));
+        state.set_mode(ElevationMode::InteractiveTerminal).unwrap();
+        let (session_id, _) = state.register_session(
+            "mount:/dev/disk7".to_string(),
+            directory.path().join("cancel"),
+            directory.path().join("missing.pid"),
+            directory.path().join("launched"),
+            directory.path().join("status"),
+            PathBuf::from("/missing/anylinuxfs"),
+        );
+
+        assert!(!state.cancel_session_for_timeout(session_id));
+        assert!(!state.mark_mount_persistent("/dev/disk7"));
+        state.unregister_session(session_id);
+        assert!(!state.mark_mount_persistent("/dev/disk7"));
+    }
+
+    #[test]
     fn cancellation_before_terminal_registration_is_not_lost() {
         let directory = tempfile::tempdir().unwrap();
         let state = Arc::new(ElevationState::load(
@@ -933,6 +1326,7 @@ mod tests {
             .expect("operation should begin");
         assert!(state.begin_operation("mount:/dev/disk7").is_err());
         assert_eq!(state.request_mount_cancellation("/dev/disk7"), 1);
+        assert!(!state.mark_mount_persistent("/dev/disk7"));
 
         let cancel_path = directory.path().join("cancel");
         let (_, cancellation_observed) = state.register_session(
@@ -977,7 +1371,7 @@ mod tests {
             directory.path().join("status"),
             PathBuf::from("/missing/anylinuxfs"),
         );
-        state.mark_mount_persistent("/dev/disk7");
+        assert!(state.mark_mount_persistent("/dev/disk7"));
         assert_eq!(state.cancel_all_pending(), 0);
         assert!(!cancel_path.exists());
     }
