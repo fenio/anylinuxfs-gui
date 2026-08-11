@@ -1,5 +1,13 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { DiskListResult, MountInfo, AppConfig, CliStatus } from './types';
+import type {
+	DiskListResult,
+	MountInfo,
+	AppConfig,
+	CliStatus,
+	ElevationMode,
+	ElevationPolicy,
+	MountCommandResult
+} from './types';
 
 export async function checkCli(): Promise<CliStatus> {
 	return await invoke<CliStatus>('check_cli');
@@ -9,8 +17,20 @@ export async function listDisks(useSudo: boolean = false, silent: boolean = fals
 	return await invoke<DiskListResult>('list_disks', { useSudo, silent });
 }
 
-export async function mountDisk(device: string, passphrase?: string, readOnly?: boolean, extraOptions?: string, ignorePermissions?: boolean): Promise<string> {
-	return await invoke<string>('mount_disk', { device, passphrase: passphrase || null, readOnly: readOnly || false, extraOptions: extraOptions || null, ignorePermissions: ignorePermissions || false });
+export async function mountDisk(device: string, passphrase?: string, readOnly?: boolean, extraOptions?: string, ignorePermissions?: boolean): Promise<MountCommandResult> {
+	return await invoke<MountCommandResult>('mount_disk', { device, passphrase: passphrase || null, readOnly: readOnly || false, extraOptions: extraOptions || null, ignorePermissions: ignorePermissions || false });
+}
+
+export async function getElevationPolicy(): Promise<ElevationPolicy> {
+	return await invoke<ElevationPolicy>('get_elevation_policy');
+}
+
+export async function setElevationMode(mode: ElevationMode): Promise<ElevationPolicy> {
+	return await invoke<ElevationPolicy>('set_elevation_mode', { mode });
+}
+
+export async function cancelElevationOperation(device: string): Promise<number> {
+	return await invoke<number>('cancel_elevation_operation', { device });
 }
 
 export async function unmountDisk(device?: string): Promise<string> {

@@ -4,6 +4,29 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use std::sync::OnceLock;
+use crate::elevation::{
+    execute_in_terminal, ElevationMode, ElevationState, TerminalExecutionError,
+    TerminalInteraction,
+};
+
+#[derive(Debug, Clone)]
+pub enum CommandExecutionError {
+    InteractionRequired,
+    Cancelled,
+    TimedOut,
+    Failed(String),
+}
+
+impl CommandExecutionError {
+    pub fn message(&self) -> String {
+        match self {
+            Self::InteractionRequired => "ALFS_SILENT_AUTH_EXPIRED".to_string(),
+            Self::Cancelled => "Interactive Terminal operation was cancelled".to_string(),
+            Self::TimedOut => "Interactive Terminal operation timed out".to_string(),
+            Self::Failed(message) => message.clone(),
+        }
+    }
+}
 
 /// Sanitize error output to avoid exposing sensitive system details
 /// Logs the full error for debugging but returns a user-friendly message
@@ -21,6 +44,9 @@ fn sanitize_error(stdout: &str, stderr: &str) -> String {
     }
     if combined.contains("Permission denied") {
         return "Permission denied - try running with administrator privileges".to_string();
+    }
+    if combined.contains("Execution blocked") || combined.contains("does not have Admin rights") {
+        return "Administrator elevation was blocked by system policy".to_string();
     }
     if combined.contains("Device busy") || combined.contains("resource busy") {
         return "Device is busy - close any applications using it and try again".to_string();
@@ -169,6 +195,54 @@ pub fn execute_command(args: &[&str], needs_sudo: bool, passphrase: Option<&str>
         execute_with_sudo(args, passphrase, silent)
     } else {
         execute_direct(args, passphrase)
+    }
+}
+
+/// Execute an anylinuxfs command using the Rust-owned elevation policy.
+pub fn execute_command_with_elevation(
+    args: &[&str],
+    needs_sudo: bool,
+    passphrase: Option<&str>,
+    silent: bool,
+    elevation_mode: ElevationMode,
+    elevation_state: &ElevationState,
+    terminal_interaction: TerminalInteraction,
+) -> Result<String, CommandExecutionError> {
+    if needs_sudo {
+        match elevation_mode {
+            ElevationMode::Native => execute_with_sudo(args, passphrase, silent)
+                .map_err(|error| {
+                    if error == "ALFS_SILENT_AUTH_EXPIRED" {
+                        CommandExecutionError::InteractionRequired
+                    } else {
+                        CommandExecutionError::Failed(error)
+                    }
+                }),
+            ElevationMode::InteractiveTerminal => execute_in_terminal(
+                elevation_state,
+                get_anylinuxfs_path().ok_or_else(|| {
+                    CommandExecutionError::Failed(
+                        "anylinuxfs CLI not found in PATH or standard locations".to_string(),
+                    )
+                })?,
+                args,
+                silent,
+                terminal_interaction,
+            )
+            .map_err(|error| match error {
+                TerminalExecutionError::InteractionRequired => {
+                    CommandExecutionError::InteractionRequired
+                }
+                TerminalExecutionError::Cancelled => CommandExecutionError::Cancelled,
+                TerminalExecutionError::TimedOut => CommandExecutionError::TimedOut,
+                TerminalExecutionError::CommandFailed { output, .. } if !output.is_empty() => {
+                    CommandExecutionError::Failed(sanitize_error(&output, ""))
+                }
+                other => CommandExecutionError::Failed(other.to_string()),
+            }),
+        }
+    } else {
+        execute_direct(args, passphrase).map_err(CommandExecutionError::Failed)
     }
 }
 
@@ -390,4 +464,18 @@ osascript -e 'Tell application "System Events" to display dialog "anylinuxfs req
         .map_err(|e| format!("Failed to persist askpass script: {}", e))?;
 
     Ok(path.to_string_lossy().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn endpoint_privilege_denial_has_a_specific_error() {
+        let message = sanitize_error(
+            "Execution blocked: user does not have Admin rights",
+            "",
+        );
+        assert_eq!(message, "Administrator elevation was blocked by system policy");
+    }
 }

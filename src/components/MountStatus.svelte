@@ -36,6 +36,10 @@
 		cleaning = false;
 		status.refresh();
 	}
+
+	async function handleCancelMount(device: string) {
+		await disks.cancelMount(device);
+	}
 </script>
 
 {#if error}
@@ -81,11 +85,20 @@
 				<span class="sr-only">Loading</span>
 			</div>
 			<div class="status-info">
-				<div class="status-label">Mounting...</div>
+				<div class="status-label">{$disks.mountingMessages.get(device) || 'Mounting…'}</div>
 				<div class="status-details">
 					<span class="detail-item">{device}</span>
 				</div>
 			</div>
+			{#if $disks.cancellableMounts.has(device)}
+				<button
+					class="unmount-btn"
+					onclick={() => handleCancelMount(device)}
+					disabled={$disks.mountingMessages.get(device)?.startsWith('Cancelling')}
+				>
+					{$disks.mountingMessages.get(device)?.startsWith('Cancelling') ? 'Cancelling…' : 'Cancel'}
+				</button>
+			{/if}
 		</div>
 	{/each}
 {/if}

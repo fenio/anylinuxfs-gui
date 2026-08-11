@@ -1,15 +1,18 @@
 import { writable, derived, get } from 'svelte/store';
 import type { Disk, DiskListResult } from '../types';
-import { listDisks, mountDisk, unmountDisk } from '../api';
+import { cancelElevationOperation, listDisks, mountDisk, unmountDisk } from '../api';
 import { Timeouts, validateDevicePath } from '../constants';
 import { logAction, logError, notifyIfHidden } from '../logger';
 import { parseError } from '../errors';
+import { elevation } from './elevation';
 
 interface DisksState {
 	disks: Disk[];
 	loading: boolean;
 	error: string | null;
 	mountingDevices: Set<string>;
+	cancellableMounts: Set<string>;
+	mountingMessages: Map<string, string>;
 	adminMode: boolean;
 	hasSupportedPartitions: boolean;
 	recentUnmount: boolean;
@@ -24,47 +27,69 @@ function createDisksStore() {
 		loading: false,
 		error: null,
 		mountingDevices: new Set(),
+		cancellableMounts: new Set(),
+		mountingMessages: new Map(),
 		adminMode: false,
 		hasSupportedPartitions: true,
 		recentUnmount: false
 	});
 
 	let unmountTimeout: ReturnType<typeof setTimeout> | null = null;
+	let refreshPromise: Promise<void> | null = null;
 
 	return {
 		subscribe,
 		async refresh(useSudo?: boolean, silent?: boolean) {
-			update((s) => ({ ...s, loading: true, error: null }));
-			try {
-				const adminMode = useSudo ?? currentAdminMode;
-				const result = await listDisks(adminMode, silent ?? false);
-				update((s) => ({
-					...s,
-					disks: result.disks,
-					hasSupportedPartitions: result.has_supported_partitions,
-					loading: false
-				}));
-			} catch (e) {
-				const rawError = String(e);
-				if (silent && rawError.includes('ALFS_SILENT_AUTH_EXPIRED')) {
-					// Credentials expired during auto-refresh — disable admin mode quietly
-					currentAdminMode = false;
+			// Disk-watcher and user refreshes share one backend operation. Coalesce
+			// overlapping requests so a silent refresh cannot clear the loading state
+			// of a visible Terminal request or launch a duplicate Terminal session.
+			if (refreshPromise) return refreshPromise;
+
+			refreshPromise = (async () => {
+				update((s) => ({ ...s, loading: true, error: null }));
+				try {
+					const adminMode = useSudo ?? currentAdminMode;
+					const result = await listDisks(adminMode, silent ?? false);
 					update((s) => ({
 						...s,
-						adminMode: false,
-						loading: false,
-						error: 'Admin credentials expired. Re-enable Admin mode to authenticate again.'
+						disks: result.disks,
+						hasSupportedPartitions: result.has_supported_partitions,
+						loading: false
 					}));
-					return;
+				} catch (e) {
+					const rawError = String(e);
+					if (silent && rawError.includes('ALFS_SILENT_AUTH_EXPIRED')) {
+						if (get(elevation).policy.mode === 'interactive_terminal') {
+							// Interactive elevation requires visible interaction. Keep the
+							// current list until the user explicitly clicks Refresh.
+							update((s) => ({ ...s, loading: false }));
+							return;
+						}
+						// Credentials expired during auto-refresh — disable admin mode quietly
+						currentAdminMode = false;
+						update((s) => ({
+							...s,
+							adminMode: false,
+							loading: false,
+							error: 'Admin credentials expired. Re-enable Admin mode to authenticate again.'
+						}));
+						return;
+					}
+					update((s) => ({ ...s, error: parseError(e).message, loading: false }));
 				}
-				update((s) => ({ ...s, error: parseError(e).message, loading: false }));
+			})();
+
+			try {
+				await refreshPromise;
+			} finally {
+				refreshPromise = null;
 			}
 		},
 		setAdminMode(enabled: boolean) {
 			currentAdminMode = enabled;
 			update((s) => ({ ...s, adminMode: enabled }));
 		},
-		async mount(device: string, passphrase?: string, readOnly?: boolean, extraOptions?: string, ignorePermissions?: boolean): Promise<'success' | 'encryption_required' | 'error'> {
+		async mount(device: string, passphrase?: string, readOnly?: boolean, extraOptions?: string, ignorePermissions?: boolean): Promise<'success' | 'encryption_required' | 'cancelled' | 'error'> {
 			// Reject if this specific device is already being mounted
 			const current = get({ subscribe });
 			if (current.mountingDevices.has(device)) return 'error';
@@ -78,44 +103,80 @@ function createDisksStore() {
 			}
 
 			logAction('Mount started', { device });
+			const elevationMode = get(elevation).policy.mode;
 			update((s) => {
 				const devices = new Set(s.mountingDevices);
+				const cancellableMounts = new Set(s.cancellableMounts);
+				const messages = new Map(s.mountingMessages);
 				devices.add(device);
-				return { ...s, mountingDevices: devices, error: null, recentUnmount: false };
+				if (elevationMode === 'interactive_terminal') cancellableMounts.add(device);
+				messages.set(
+					device,
+					elevationMode === 'interactive_terminal'
+						? 'Waiting for administrator approval and disk passphrase in Terminal…'
+						: 'Mounting…'
+				);
+				return {
+					...s,
+					mountingDevices: devices,
+					cancellableMounts,
+					mountingMessages: messages,
+					error: null,
+					recentUnmount: false
+				};
 			});
 			try {
-				await mountDisk(device, passphrase, readOnly, extraOptions, ignorePermissions);
-				logAction('Mount completed', { device });
-				update((s) => {
-					const devices = new Set(s.mountingDevices);
-					devices.delete(device);
-					return { ...s, mountingDevices: devices };
-				});
-				notifyIfHidden('Mount Complete', `${device} mounted successfully.`);
-				return 'success';
-			} catch (e) {
-				const rawError = String(e);
-
-				// Detect encryption-required error from backend
-				if (rawError.includes('ENCRYPTION_REQUIRED')) {
+				const result = await mountDisk(device, passphrase, readOnly, extraOptions, ignorePermissions);
+				if (result.outcome === 'mounted') {
+					logAction('Mount completed', { device });
+					notifyIfHidden('Mount Complete', `${device} mounted successfully.`);
+					return 'success';
+				}
+				if (result.outcome === 'encryption_required') {
 					logAction('Encryption detected, passphrase needed', { device });
-					update((s) => {
-						const devices = new Set(s.mountingDevices);
-						devices.delete(device);
-						return { ...s, mountingDevices: devices };
-					});
 					return 'encryption_required';
 				}
+				if (result.outcome === 'cancelled') {
+					logAction('Mount cancelled', { device });
+					return 'cancelled';
+				}
 
+				const errorMessage = result.message || 'Mount failed';
+				logError('mount', new Error(errorMessage));
+				notifyIfHidden('Mount Failed', errorMessage);
+				update((s) => ({ ...s, error: errorMessage }));
+				return 'error';
+			} catch (e) {
 				logError('mount', e);
 				const errorMessage = parseError(e).message;
 				notifyIfHidden('Mount Failed', errorMessage);
+				update((s) => ({ ...s, error: errorMessage }));
+				return 'error';
+			} finally {
 				update((s) => {
 					const devices = new Set(s.mountingDevices);
+					const cancellableMounts = new Set(s.cancellableMounts);
+					const messages = new Map(s.mountingMessages);
 					devices.delete(device);
-					return { ...s, error: errorMessage, mountingDevices: devices };
+					cancellableMounts.delete(device);
+					messages.delete(device);
+					return { ...s, mountingDevices: devices, cancellableMounts, mountingMessages: messages };
 				});
-				return 'error';
+			}
+		},
+		async cancelMount(device: string): Promise<void> {
+			update((s) => {
+				if (!s.mountingDevices.has(device)) return s;
+				const messages = new Map(s.mountingMessages);
+				messages.set(device, 'Cancelling mount and requesting cleanup…');
+				return { ...s, mountingMessages: messages };
+			});
+			try {
+				await cancelElevationOperation(device);
+			} catch (error) {
+				const errorMessage = parseError(error).message;
+				logError('cancelMount', error);
+				update((s) => ({ ...s, error: errorMessage }));
 			}
 		},
 		async unmount(device?: string) {

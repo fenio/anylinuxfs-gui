@@ -1,11 +1,18 @@
 use serde::{Deserialize, Serialize};
 use std::process::Command;
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 use tokio::time::timeout;
 use crate::cache;
-use crate::cli::execute_command;
+use crate::cli::{
+    execute_command, execute_command_with_elevation, CommandExecutionError,
+};
+use crate::elevation::{
+    ElevationMode, ElevationState, TerminalInteraction,
+    INTERACTIVE_ELEVATION_TIMEOUT_SECS,
+};
 use crate::paths::{COMMAND_TIMEOUT_SECS, MOUNT_TIMEOUT_SECS};
 
 /// Validate device path to prevent command injection
@@ -80,11 +87,36 @@ pub struct DiskListResult {
 }
 
 #[tauri::command]
-pub async fn list_disks(use_sudo: bool, silent: bool) -> Result<DiskListResult, String> {
+pub async fn list_disks(
+    elevation_state: tauri::State<'_, Arc<ElevationState>>,
+    use_sudo: bool,
+    silent: bool,
+) -> Result<DiskListResult, String> {
+    let elevation_state = elevation_state.inner().clone();
+    let operation_guard = elevation_state.begin_operation("list")?;
+    let elevation_mode = operation_guard.mode();
+    let timeout_secs = if use_sudo && elevation_mode == ElevationMode::InteractiveTerminal {
+        INTERACTIVE_ELEVATION_TIMEOUT_SECS
+    } else {
+        COMMAND_TIMEOUT_SECS
+    };
+    let list_elevation_state = elevation_state.clone();
+
     // Run in blocking task with timeout to avoid freezing UI
     let list_future = tokio::task::spawn_blocking(move || {
         // Run list command (now shows all volumes by default, including broken SD cards)
-        let output = execute_command(&["list"], use_sudo, None, silent)?;
+        let output = execute_command_with_elevation(
+            &["list"],
+            use_sudo,
+            None,
+            silent,
+            elevation_mode,
+            &list_elevation_state,
+            TerminalInteraction::CaptureOutput {
+                operation: "list".to_string(),
+            },
+        )
+        .map_err(|error| error.message())?;
         let mut result = parse_disk_list_output(&output)?;
 
         // Check which partitions are already mounted by the system
@@ -102,10 +134,14 @@ pub async fn list_disks(use_sudo: bool, silent: bool) -> Result<DiskListResult, 
         Ok(result)
     });
 
-    timeout(Duration::from_secs(COMMAND_TIMEOUT_SECS), list_future)
-        .await
-        .map_err(|_| format!("List disks timed out after {} seconds", COMMAND_TIMEOUT_SECS))?
-        .map_err(|e| format!("Task error: {}", e))?
+    match timeout(Duration::from_secs(timeout_secs), list_future).await {
+        Ok(result) => result
+            .map_err(|error| format!("Task error: {}", error))?,
+        Err(_) => {
+            elevation_state.cancel_pending_operation("list");
+            Err(format!("List disks timed out after {} seconds", timeout_secs))
+        }
+    }
 }
 
 fn update_mount_status(result: &mut DiskListResult) {
@@ -525,10 +561,47 @@ fn parse_type_and_name(parts: &[&str]) -> (String, Option<String>) {
     ("unknown".to_string(), None)
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MountOutcome {
+    Mounted,
+    EncryptionRequired,
+    Cancelled,
+    TimedOut,
+    Failed,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MountCommandResult {
+    pub outcome: MountOutcome,
+    pub message: Option<String>,
+}
+
+impl MountCommandResult {
+    fn new(outcome: MountOutcome, message: impl Into<Option<String>>) -> Self {
+        Self {
+            outcome,
+            message: message.into(),
+        }
+    }
+}
+
 #[tauri::command]
-pub async fn mount_disk(app: AppHandle, device: String, passphrase: Option<String>, read_only: Option<bool>, extra_options: Option<String>, ignore_permissions: Option<bool>) -> Result<String, String> {
+pub async fn mount_disk(
+    app: AppHandle,
+    elevation_state: tauri::State<'_, Arc<ElevationState>>,
+    device: String,
+    passphrase: Option<String>,
+    read_only: Option<bool>,
+    extra_options: Option<String>,
+    ignore_permissions: Option<bool>,
+) -> Result<MountCommandResult, String> {
     // Validate device path before use
     validate_device_path(&device)?;
+    let elevation_state = elevation_state.inner().clone();
+    let operation = format!("mount:{}", device);
+    let operation_guard = elevation_state.begin_operation(operation.clone())?;
+    let elevation_mode = operation_guard.mode();
 
     // Sanitize extra_options with a whitelist to prevent command injection
     if let Some(ref opts) = extra_options {
@@ -557,13 +630,23 @@ pub async fn mount_disk(app: AppHandle, device: String, passphrase: Option<Strin
     // Spawn the mount command in a background thread so we can poll status
     // concurrently — the mount appears in Finder before the command exits
     let mount_device = device.clone();
-    let mount_result: std::sync::Arc<std::sync::Mutex<Option<Result<String, String>>>> =
+    let mount_operation = operation.clone();
+    let mount_elevation_state = elevation_state.clone();
+    let mount_result: std::sync::Arc<
+        std::sync::Mutex<Option<Result<String, CommandExecutionError>>>,
+    > =
         std::sync::Arc::new(std::sync::Mutex::new(None));
     let mount_result_bg = mount_result.clone();
 
     let _mount_thread = tokio::task::spawn_blocking(move || {
-        let effective_passphrase = passphrase.unwrap_or_else(|| "##PROBE##".to_string());
-        let pass_ref = Some(effective_passphrase.as_str());
+        // Interactive Terminal elevation prompts there. Never place a disk
+        // passphrase in a generated command file or process environment.
+        let effective_passphrase = if elevation_mode == ElevationMode::InteractiveTerminal {
+            None
+        } else {
+            Some(passphrase.unwrap_or_else(|| "##PROBE##".to_string()))
+        };
+        let pass_ref = effective_passphrase.as_deref();
 
         let result = {
             let mut args: Vec<&str> = vec!["mount"];
@@ -574,7 +657,17 @@ pub async fn mount_disk(app: AppHandle, device: String, passphrase: Option<Strin
                 args.extend_from_slice(&["-o", combined]);
             }
             args.push(&mount_device);
-            execute_command(&args, true, pass_ref, false)
+            execute_command_with_elevation(
+                &args,
+                true,
+                pass_ref,
+                false,
+                elevation_mode,
+                &mount_elevation_state,
+                TerminalInteraction::SecretPrompt {
+                    operation: mount_operation,
+                },
+            )
         };
 
         *mount_result_bg.lock().unwrap() = Some(result);
@@ -588,40 +681,82 @@ pub async fn mount_disk(app: AppHandle, device: String, passphrase: Option<Strin
             || lower.contains("encrypted") || lower.contains("wrong key")
     };
 
-    // Poll `anylinuxfs status` concurrently while mount command runs
-    // 120 retries × 500ms = 60 seconds total timeout
-    for i in 0..120 {
+    // Poll `anylinuxfs status` concurrently while mount command runs. Interactive
+    // elevation gets a longer window for approval and a disk passphrase.
+    let mount_timeout_secs = if elevation_mode == ElevationMode::InteractiveTerminal {
+        INTERACTIVE_ELEVATION_TIMEOUT_SECS
+    } else {
+        MOUNT_TIMEOUT_SECS
+    };
+    let retries = mount_timeout_secs * 2;
+    for i in 0..retries {
         if i > 0 {
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
 
         // Check if mount command finished with an error
-        if let Some(ref result) = *mount_result.lock().unwrap() {
+        let mount_command_succeeded = if let Some(ref result) = *mount_result.lock().unwrap() {
             let output_text = match result {
                 Ok(out) => out.clone(),
-                Err(e) => e.clone(),
+                Err(error) => error.message(),
             };
             if is_encryption_error(&output_text) {
                 // Clean up leftover VM from the failed probe attempt
-                let _ = execute_command(&["stop"], true, None, false);
+                let _ = execute_command(&["stop", &device], false, None, false);
                 let _ = app.emit("status-changed", ());
-                return Err("ENCRYPTION_REQUIRED: This partition is encrypted. A passphrase is needed to mount it.".to_string());
+                if elevation_mode == ElevationMode::InteractiveTerminal {
+                    return Ok(MountCommandResult::new(
+                        MountOutcome::Failed,
+                        output_text,
+                    ));
+                }
+                return Ok(MountCommandResult::new(
+                    MountOutcome::EncryptionRequired,
+                    "This partition is encrypted. A passphrase is needed to mount it."
+                        .to_string(),
+                ));
             }
-            if result.is_err() {
+            if let Err(error) = result {
                 let _ = app.emit("status-changed", ());
-                return Err(result.as_ref().unwrap_err().clone());
+                return Ok(match error {
+                    CommandExecutionError::Cancelled => MountCommandResult::new(
+                        MountOutcome::Cancelled,
+                        "Mount cancelled".to_string(),
+                    ),
+                    CommandExecutionError::TimedOut => MountCommandResult::new(
+                        MountOutcome::TimedOut,
+                        "Interactive Terminal mount timed out and cleanup was requested."
+                            .to_string(),
+                    ),
+                    other => MountCommandResult::new(MountOutcome::Failed, other.message()),
+                });
             }
-        }
+            true
+        } else {
+            false
+        };
 
         // Check if this specific device appeared in `anylinuxfs status`
-        if check_device_mounted(&device) {
+        if check_device_mounted(&device)
+            && (mount_command_succeeded || elevation_state.mark_mount_persistent(&device))
+        {
             let _ = app.emit("status-changed", ());
-            return Ok("Mounted successfully".to_string());
+            return Ok(MountCommandResult::new(
+                MountOutcome::Mounted,
+                Some("Mounted successfully".to_string()),
+            ));
         }
     }
 
+    elevation_state.cancel_active_mount(&device);
     let _ = app.emit("status-changed", ());
-    Err(format!("Mount operation timed out after {} seconds", MOUNT_TIMEOUT_SECS))
+    Ok(MountCommandResult::new(
+        MountOutcome::TimedOut,
+        format!(
+            "Mount operation timed out after {} seconds and cleanup was requested.",
+            mount_timeout_secs
+        ),
+    ))
 }
 
 fn check_device_mounted(device: &str) -> bool {
@@ -762,6 +897,17 @@ mod tests {
 
         let devices: Vec<&str> = disk.partitions.iter().map(|p| p.device.as_str()).collect();
         assert_eq!(devices, vec!["/dev/disk6s1", "/dev/disk6s5"]);
+    }
+
+    #[test]
+    fn mount_outcomes_have_a_stable_frontend_shape() {
+        let result = MountCommandResult::new(
+            MountOutcome::TimedOut,
+            "Cleanup was requested".to_string(),
+        );
+        let json = serde_json::to_value(result).expect("mount result should serialize");
+        assert_eq!(json["outcome"], "timed_out");
+        assert_eq!(json["message"], "Cleanup was requested");
     }
 
     /// Issue #133: the CLI identifies BitLocker directly, so diskutil's

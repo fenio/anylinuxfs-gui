@@ -50,6 +50,18 @@ xattr -cr /Applications/anylinuxfs-gui.app
 
 Then you can open the app normally.
 
+## Administrator authentication
+
+The default **Native sudo** mode uses cached/native PAM authentication and falls back to the app's password dialog. This works for normal macOS administrator accounts.
+
+For managed Macs where an endpoint privilege manager requires an interactive terminal, open **Preferences → Administrator authentication** and select **Interactive Terminal (managed Macs)**. Admin scans and mount operations then open an owner-only temporary `.command` file in Terminal. Complete the organization's approval or justification prompt there. LUKS and BitLocker secrets are requested directly by `anylinuxfs` in Terminal; they are not placed in the generated command file or its environment.
+
+Interactive mount commands use macOS `script -q /dev/null` as a bidirectional pseudo-terminal relay and are not piped through an output-capture process. Terminal echo is disabled before the command and restored by a cleanup trap. This is required for endpoint privilege managers that place an elevated child on another pseudo-terminal, and prevents encryption secrets from being echoed or written to a handoff transcript. Output capture remains enabled only for non-secret discovery commands such as `list`.
+
+Interactive Terminal mode never opens a window for automatic background refreshes. With Admin mode enabled, click **Refresh** when disks are connected or removed. A pending mount can be cancelled from the GUI; the app terminates its Terminal handoff and requests device-specific cleanup. This mode does not bypass organizational policy: the privilege manager can still approve or deny each command.
+
+The Rust backend owns and persists the elevation setting. It cannot be changed while a privileged operation is active, so the authentication and cancellation behavior remain stable until that operation finishes.
+
 ## Screenshots
 
 <picture>
