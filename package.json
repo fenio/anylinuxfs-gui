@@ -3,6 +3,9 @@
   "version": "0.7.5",
   "private": true,
   "type": "module",
+  "imports": {
+    "#lib/*": "./src/lib/*.ts"
+  },
   "scripts": {
     "dev": "vite dev",
     "build": "vite build && npm run fix-paths",
@@ -23,8 +26,8 @@
     "@xterm/xterm": "^6.0.0"
   },
   "devDependencies": {
-    "@sveltejs/adapter-static": "^3.0.10",
-    "@sveltejs/kit": "^2.57.1",
+    "@sveltejs/adapter-static": "^4.0.0",
+    "@sveltejs/kit": "^3.0.0",
     "@sveltejs/vite-plugin-svelte": "^7",
     "@tauri-apps/cli": "^2",
     "svelte": "^5.55.4",

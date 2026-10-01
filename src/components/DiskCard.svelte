@@ -1,8 +1,8 @@
 <script lang="ts">
-	import type { Partition } from '$lib/types';
-	import { disks } from '$lib/stores/disks';
-	import { elevation } from '$lib/stores/elevation';
-	import { status, mountedDevices } from '$lib/stores/status';
+	import type { Partition } from '#lib/types';
+	import { disks } from '#lib/stores/disks';
+	import { elevation } from '#lib/stores/elevation';
+	import { status, mountedDevices } from '#lib/stores/status';
 
 	interface Props {
 		partition: Partition;

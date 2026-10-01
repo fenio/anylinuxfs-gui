@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 	import { onMount } from 'svelte';
-	import { checkCli } from '$lib/api';
+	import { checkCli } from '#lib/api';
 	import { open } from '@tauri-apps/plugin-shell';
 	import { exit } from '@tauri-apps/plugin-process';
-	import { isMounted } from '$lib/stores/status';
+	import { isMounted } from '#lib/stores/status';
 
 	const navItems = [
 		{ path: '/', label: 'Disks', icon: 'disk' },
@@ -46,8 +46,8 @@
 				<a
 					href={item.path}
 					class="nav-item"
-					class:active={isActive(item.path, $page.url.pathname)}
-					aria-current={isActive(item.path, $page.url.pathname) ? 'page' : undefined}
+					class:active={isActive(item.path, page.url.pathname)}
+					aria-current={isActive(item.path, page.url.pathname) ? 'page' : undefined}
 				>
 					<span class="nav-icon" data-icon={item.icon}></span>
 					<span class="nav-label">{item.label}</span>

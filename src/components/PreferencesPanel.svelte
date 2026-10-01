@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { enable, disable, isEnabled } from '@tauri-apps/plugin-autostart';
 	import { onMount } from 'svelte';
-	import { elevation } from '$lib/stores/elevation';
-	import { disks } from '$lib/stores/disks';
-	import type { ElevationMode } from '$lib/types';
+	import { elevation } from '#lib/stores/elevation';
+	import { disks } from '#lib/stores/disks';
+	import type { ElevationMode } from '#lib/types';
 
 	let autoLaunch = $state(false);
 	let autoLaunchLoading = $state(false);

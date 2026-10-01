@@ -1,8 +1,8 @@
 <script lang="ts">
 	import '../app.css';
 	import Sidebar from '../components/Sidebar.svelte';
-	import { status } from '$lib/stores/status';
-	import { elevation } from '$lib/stores/elevation';
+	import { status } from '#lib/stores/status';
+	import { elevation } from '#lib/stores/elevation';
 	import { onMount, onDestroy } from 'svelte';
 	import type { Snippet } from 'svelte';
 

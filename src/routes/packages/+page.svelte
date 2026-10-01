@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { listPackages, addPackages, removePackages } from '$lib/api';
-	import { isMounted } from '$lib/stores/status';
-	import { wrapAsync, parseError } from '$lib/errors';
+	import { listPackages, addPackages, removePackages } from '#lib/api';
+	import { isMounted } from '#lib/stores/status';
+	import { wrapAsync, parseError } from '#lib/errors';
 
 	let packages = $state<string[]>([]);
 	let loading = $state(true);

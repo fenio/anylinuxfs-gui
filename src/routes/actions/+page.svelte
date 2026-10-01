@@ -6,8 +6,8 @@
 		updateCustomAction,
 		deleteCustomAction,
 		type CustomAction
-	} from '$lib/api';
-	import { wrapAsync, parseError } from '$lib/errors';
+	} from '#lib/api';
+	import { wrapAsync, parseError } from '#lib/errors';
 
 	let actions = $state<CustomAction[]>([]);
 	let loading = $state(true);

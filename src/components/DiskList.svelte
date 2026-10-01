@@ -1,13 +1,13 @@
 <script lang="ts">
-	import { disks } from '$lib/stores/disks';
-	import { status } from '$lib/stores/status';
+	import { disks } from '#lib/stores/disks';
+	import { status } from '#lib/stores/status';
 	import DiskCard from './DiskCard.svelte';
 	import PassphraseDialog from './PassphraseDialog.svelte';
 	import { onMount } from 'svelte';
 	import { listen } from '@tauri-apps/api/event';
-	import { startDiskWatcher, ejectDisk } from '$lib/api';
-	import { Events } from '$lib/constants';
-	import { logAction, logError } from '$lib/logger';
+	import { startDiskWatcher, ejectDisk } from '#lib/api';
+	import { Events } from '#lib/constants';
+	import { logAction, logError } from '#lib/logger';
 
 	let ejectingDevice: string | null = $state(null);
 	let showErrorDetails = $state(false);

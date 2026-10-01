@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { config } from '$lib/stores/config';
+	import { config } from '#lib/stores/config';
 	import { onMount } from 'svelte';
 
 	let ramMb = $state(1024);

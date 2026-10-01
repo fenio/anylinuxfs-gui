@@ -3,10 +3,10 @@
 	import { Terminal } from '@xterm/xterm';
 	import { FitAddon } from '@xterm/addon-fit';
 	import { listen } from '@tauri-apps/api/event';
-	import { startShell, writeShell, resizeShell, stopShell, getMountStatus, listImages, type VmImage } from '$lib/api';
-	import { Events } from '$lib/constants';
-	import { logAction, logError } from '$lib/logger';
-	import { parseError } from '$lib/errors';
+	import { startShell, writeShell, resizeShell, stopShell, getMountStatus, listImages, type VmImage } from '#lib/api';
+	import { Events } from '#lib/constants';
+	import { logAction, logError } from '#lib/logger';
+	import { parseError } from '#lib/errors';
 	import '@xterm/xterm/css/xterm.css';
 
 	let terminalEl: HTMLDivElement;

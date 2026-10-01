@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { listImages, installImage, uninstallImage, type VmImage } from '$lib/api';
-	import { isMounted } from '$lib/stores/status';
-	import { wrapAsync, parseError } from '$lib/errors';
+	import { listImages, installImage, uninstallImage, type VmImage } from '#lib/api';
+	import { isMounted } from '#lib/stores/status';
+	import { wrapAsync, parseError } from '#lib/errors';
 
 	let images = $state<VmImage[]>([]);
 	let loading = $state(true);

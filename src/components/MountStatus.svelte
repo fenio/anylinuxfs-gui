@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { status, isMounted } from '$lib/stores/status';
-	import { disks } from '$lib/stores/disks';
-	import { forceCleanup, setTrayUnmountEnabled } from '$lib/api';
-	import { Timeouts } from '$lib/constants';
-	import { logAction, logError } from '$lib/logger';
-	import { parseError } from '$lib/errors';
+	import { status, isMounted } from '#lib/stores/status';
+	import { disks } from '#lib/stores/disks';
+	import { forceCleanup, setTrayUnmountEnabled } from '#lib/api';
+	import { Timeouts } from '#lib/constants';
+	import { logAction, logError } from '#lib/logger';
+	import { parseError } from '#lib/errors';
 	let unmountingDevices = $state(new Set<string>());
 	let cleaning = $state(false);
 	let error = $state<string | null>(null);

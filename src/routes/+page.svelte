@@ -2,8 +2,8 @@
 	import { onMount } from 'svelte';
 	import MountStatus from '../components/MountStatus.svelte';
 	import DiskList from '../components/DiskList.svelte';
-	import { checkCli } from '$lib/api';
-	import { status } from '$lib/stores/status';
+	import { checkCli } from '#lib/api';
+	import { status } from '#lib/stores/status';
 
 	let cliMissing = $state(false);
 	let vmNotInitialized = $state(false);

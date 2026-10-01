@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { logs, type LogLine } from '$lib/stores/logs';
+	import { logs, type LogLine } from '#lib/stores/logs';
 	import { onMount, onDestroy } from 'svelte';
 
 	// Virtualization settings
