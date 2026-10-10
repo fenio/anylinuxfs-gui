@@ -32,6 +32,12 @@ jobs:
       - name: Rust check
         run: cd src-tauri && cargo check
 
+      - name: Rust tests
+        run: cd src-tauri && cargo test --locked
+
+      - name: Frontend unit tests
+        run: npm test
+
       - name: Svelte sync
         run: npx svelte-kit sync
 

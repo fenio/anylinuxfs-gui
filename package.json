@@ -7,6 +7,7 @@
     "#lib/*": "./src/lib/*.ts"
   },
   "scripts": {
+    "test": "node --test tests/*.test.mjs",
     "dev": "vite dev",
     "build": "vite build && npm run fix-paths",
     "fix-paths": "node scripts/fix-paths.js",

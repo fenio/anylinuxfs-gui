@@ -4,13 +4,14 @@
 	import { parseError } from '#lib/errors';
 	interface Props {
 		device: string;
+		description?: string;
 		errorMessage?: string | null;
 		submitting?: boolean;
 		onSubmit: (passphrase?: string, keyFile?: string) => void;
 		onCancel: () => void;
 	}
 
-	let { device, errorMessage = null, submitting = false, onSubmit, onCancel }: Props = $props();
+	let { device, description, errorMessage = null, submitting = false, onSubmit, onCancel }: Props = $props();
 
 	let passphrase = $state('');
 	let method = $state<'passphrase' | 'key_file'>('passphrase');
@@ -72,6 +73,7 @@
 			<p class="device-info">
 				Choose how to unlock <code>{device}</code>.
 			</p>
+			{#if description}<p class="device-info">{description}</p>{/if}
 			{#if errorMessage}
 				<p class="passphrase-error" role="alert">{errorMessage}</p>
 			{/if}
