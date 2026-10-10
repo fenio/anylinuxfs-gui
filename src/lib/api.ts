@@ -6,7 +6,8 @@ import type {
 	CliStatus,
 	ElevationMode,
 	ElevationPolicy,
-	MountCommandResult
+	MountCommandResult,
+	BtrfsSubvolumeList
 } from './types';
 
 export async function checkCli(): Promise<CliStatus> {
@@ -19,6 +20,10 @@ export async function listDisks(useSudo: boolean = false, silent: boolean = fals
 
 export async function selectKeyFile(): Promise<string | null> {
 	return await invoke<string | null>('select_key_file');
+}
+
+export async function listBtrfsSubvolumes(device: string): Promise<BtrfsSubvolumeList> {
+	return await invoke<BtrfsSubvolumeList>('list_btrfs_subvolumes', { device });
 }
 
 export async function mountDisk(device: string, passphrase?: string, readOnly?: boolean, extraOptions?: string, ignorePermissions?: boolean, keyFile?: string): Promise<MountCommandResult> {

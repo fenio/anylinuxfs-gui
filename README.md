@@ -54,6 +54,16 @@ Then you can open the app normally.
 
 The default **Native sudo** mode uses cached/native PAM authentication and falls back to the app's password dialog. This works for normal macOS administrator accounts.
 
+### Btrfs subvolumes and snapshots
+
+Btrfs partitions have a **Btrfs subvolume** selector. Choose the filesystem default, the top-level filesystem (ID 5), or click **Discover subvolumes** to list nested subvolumes and snapshots. Discovery requires an `anylinuxfs` CLI supporting `vm exec` and `btrfs-progs` in its Linux VM.
+
+For an unmounted drive, discovery temporarily mounts the top level with `ro,nologreplay,subvolid=5`, reads the metadata, and unmounts it again. This uses the normal CLI mount flow and may request administrator approval. Encrypted filesystems use the existing passphrase/key-file dialog. If the inner filesystem is not yet known, enable **+ → Btrfs inside encrypted volume (show subvolumes)**. For an already-mounted Btrfs drive, discovery reads metadata without unmounting or changing the current mount; unmount it before selecting a different subvolume.
+
+Selections are remembered per filesystem UUID (device path when unavailable) and use `subvolid=`, so paths with spaces or special characters work without typing mount options. Read-only subvolumes are marked, snapshots are identified by their parent UUID, and selecting a read-only subvolume enables **RO**. The filesystem's on-disk default is never changed. You can also enter `subvol=@`, `subvol=@home`, or `subvolid=256` in **+** mount options. Only one subvolume per device can be mounted at a time in the current GUI; discovery results are refreshed on demand rather than persisted. Subvolume creation/deletion and filesystem maintenance are not included.
+
+### Administrator authentication
+
 For managed Macs where an endpoint privilege manager requires an interactive terminal, open **Preferences → Administrator authentication** and select **Interactive Terminal (managed Macs)**. Admin scans and mount operations then open an owner-only temporary `.command` file in Terminal. Complete the organization's approval or justification prompt there. LUKS and BitLocker secrets are requested directly by `anylinuxfs` in Terminal; they are not placed in the generated command file or its environment.
 
 In the unlock dialog, select **Key file → Browse…** to use a local encryption key file instead of a passphrase. Only its path is passed to `anylinuxfs`; the GUI does not read or save the key contents or remember the selected path. In Interactive Terminal mode, key-file mounts still request administrator approval in Terminal. For encrypted ZFS pools or volumes whose encryption was not detected during scanning, open the partition's **+** mount options and enable **Unlock with passphrase or key file** before mounting. Key-file formats and filesystem support are handled by the installed `anylinuxfs` CLI.
