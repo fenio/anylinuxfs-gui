@@ -18,7 +18,7 @@ use crate::paths::{COMMAND_TIMEOUT_SECS, MOUNT_TIMEOUT_SECS};
 
 /// Validate device path to prevent command injection
 /// Device must start with /dev/, raid:, or lvm: and contain only safe characters
-fn validate_device_path(device: &str) -> Result<(), String> {
+pub(super) fn validate_device_path(device: &str) -> Result<(), String> {
     if device.is_empty() {
         return Err("Device path is required".to_string());
     }
@@ -620,6 +620,16 @@ fn validate_unlock_credentials(passphrase: Option<&str>, key_file: Option<&str>)
     Ok(())
 }
 
+fn validate_mount_options(opts: &str) -> Result<(), String> {
+    if opts.chars().all(|c| {
+        c.is_ascii_alphanumeric() || matches!(c, ',' | '.' | '_' | '-' | '=' | '/' | ':' | '@')
+    }) {
+        Ok(())
+    } else {
+        Err("Mount options contain invalid characters".to_string())
+    }
+}
+
 fn mount_passphrase(passphrase: Option<String>, using_key_file: bool, mode: ElevationMode) -> Option<String> {
     if using_key_file || mode == ElevationMode::InteractiveTerminal {
         None
@@ -685,12 +695,7 @@ pub async fn mount_disk(
 
     // Sanitize extra_options with a whitelist to prevent command injection
     if let Some(ref opts) = extra_options {
-        let valid = opts.chars().all(|c| {
-            c.is_ascii_alphanumeric() || matches!(c, ',' | '.' | '_' | '-' | '=' | '/' | ':')
-        });
-        if !valid {
-            return Err("Mount options contain invalid characters".to_string());
-        }
+        validate_mount_options(opts)?;
     }
 
     // Build combined mount options string
@@ -916,6 +921,16 @@ mod tests {
             Err(CommandExecutionError::TimedOut),
         ] {
             assert_eq!(unlock_failure_outcome(&result, false, ElevationMode::Native), None);
+        }
+    }
+
+    #[test]
+    fn btrfs_mount_options_accept_at_paths_but_reject_shell_metacharacters() {
+        for opts in ["subvol=@", "subvol=@home,compress=zstd:5", "ro,subvol=@/.snapshots/42/snapshot", "subvolid=5"] {
+            assert!(validate_mount_options(opts).is_ok());
+        }
+        for opts in ["subvol=@;id", "subvol=$(id)", "subvol=`id`", "subvol=@\nreboot", "subvol=\"@\""] {
+            assert!(validate_mount_options(opts).is_err());
         }
     }
 

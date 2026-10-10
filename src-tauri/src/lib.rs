@@ -44,7 +44,7 @@ fn set_dock_visible(visible: bool) {
 }
 
 use commands::{
-    list_disks, mount_disk, select_key_file, unmount_disk, eject_disk, force_cleanup,
+    list_disks, mount_disk, select_key_file, list_btrfs_subvolumes, unmount_disk, eject_disk, force_cleanup,
     get_mount_status, check_cli,
     get_log_content, list_log_files, start_log_stream, start_disk_watcher, stop_watchers,
     get_config, update_config,
@@ -252,6 +252,7 @@ pub fn run() {
             list_disks,
             mount_disk,
             select_key_file,
+            list_btrfs_subvolumes,
             unmount_disk,
             eject_disk,
             force_cleanup,

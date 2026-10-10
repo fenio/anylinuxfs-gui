@@ -4,6 +4,8 @@
 	import { elevation } from '#lib/stores/elevation';
 	import { status, mountedDevices } from '#lib/stores/status';
 	import { filesystemFamily, defaultMountOptions, mountOptionError, suggestedMountOptions } from '#lib/filesystems';
+	import BtrfsSubvolumePicker from './BtrfsSubvolumePicker.svelte';
+	import { withBtrfsSubvolume } from '#lib/btrfs';
 
 	interface Props {
 		partition: Partition;
@@ -14,7 +16,10 @@
 
 	let { partition, onRequestPassphrase }: Props = $props();
 
-	let mounting = $derived($disks.mountingDevices.has(partition.device));
+	let discoveringSubvolumes = $state(false);
+	let mounting = $derived($disks.mountingDevices.has(partition.device) || discoveringSubvolumes);
+	let btrfsInsideEncrypted = $state(loadBtrfsHint());
+	let isBtrfs = $derived(partition.filesystem.toLowerCase().includes('btrfs') || $status.mounts.some((mount) => mount.device === partition.device && mount.filesystem === 'btrfs') || btrfsInsideEncrypted);
 	let alreadyMounted = $derived($mountedDevices.has(partition.device));
 	let isUnavailable = $derived(partition.mounted_by_system || !partition.supported);
 	let family = $derived(filesystemFamily($status.mounts.find((mount) => mount.device === partition.device)?.filesystem || partition.filesystem));
@@ -57,6 +62,10 @@
 		} catch {
 			return '';
 		}
+	}
+
+	function loadBtrfsHint(): boolean {
+		return partition.encrypted && loadSavedOptions().split(',').some((option) => /^(subvol|subvolid)=/.test(option.trim()));
 	}
 
 	// Save options for this drive
@@ -106,6 +115,11 @@
 
 	function optionParts(): string[] {
 		return extraOptions.split(',').map((s) => s.trim()).filter(Boolean);
+	}
+
+	function selectSubvolume(option: string, readOnlySubvolume: boolean) {
+		extraOptions = withBtrfsSubvolume(extraOptions, option, readOnlySubvolume);
+		saveOptions(extraOptions);
 	}
 
 	function readOnly(): boolean {
@@ -171,7 +185,7 @@
 	}
 
 	async function handleMount() {
-		if (optionsError || $elevation.loading || $elevation.saving) return;
+		if (mounting || optionsError || $elevation.loading || $elevation.saving) return;
 
 		// Split ro out of extraOptions for the backend API
 		const parts = optionParts();
@@ -251,7 +265,7 @@
 					>
 						{#if mounting}
 							<span class="spinner"></span>
-							{$elevation.policy.mode === 'interactive_terminal' ? 'Waiting in Terminal…' : 'Mounting…'}
+							{discoveringSubvolumes ? 'Discovering…' : $elevation.policy.mode === 'interactive_terminal' ? 'Waiting in Terminal…' : 'Mounting…'}
 						{:else}
 							Mount
 						{/if}
@@ -268,12 +282,25 @@
 		{/if}
 	</div>
 	{#if optionsError}<p class="option-notice" role="alert">{optionsError} Open <strong>+</strong> to edit the saved options.</p>{/if}
+	{#if isBtrfs && !isUnavailable}
+		<BtrfsSubvolumePicker
+			{partition} options={extraOptions} mounted={alreadyMounted}
+			disabled={$disks.mountingDevices.has(partition.device) || $elevation.loading || $elevation.saving}
+			onSelect={selectSubvolume} onBusyChange={(busy) => discoveringSubvolumes = busy}
+		/>
+	{/if}
 	{#if showOptions && !isUnavailable}
 		<div class="options-panel">
 			{#if family === 'zfs'}
 				<p class="option-notice">RO imports the ZFS pool read-only. Other Linux mount options are not applied to ZFS datasets. Dataset properties and snapshots are managed through the CLI.</p>
 			{:else if family === 'unknown'}
 				<p class="option-notice">The inner filesystem is not known yet. Enable Admin mode for detection; custom option compatibility cannot be checked until its type is known.</p>
+			{/if}
+			{#if partition.encrypted}
+				<label class="flag-toggle">
+					<input type="checkbox" bind:checked={btrfsInsideEncrypted} disabled={mounting || alreadyMounted} />
+					<span>Btrfs inside encrypted volume (show subvolumes)</span>
+				</label>
 			{/if}
 			<label class="flag-toggle">
 				<input type="checkbox" bind:checked={requestUnlock} disabled={mounting || alreadyMounted} />

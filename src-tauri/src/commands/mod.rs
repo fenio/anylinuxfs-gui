@@ -1,4 +1,5 @@
 pub mod disk;
+pub mod btrfs;
 pub mod status;
 pub mod log;
 pub mod config;
@@ -8,6 +9,7 @@ pub mod apk;
 pub mod action;
 
 pub use disk::*;
+pub use btrfs::list_btrfs_subvolumes;
 pub use status::{check_cli, get_mount_status, get_mount_status_sync};
 pub use log::{get_log_content, list_log_files, start_log_stream, start_disk_watcher, stop_watchers, WatcherState};
 pub use config::*;

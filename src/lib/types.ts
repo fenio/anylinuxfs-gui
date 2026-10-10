@@ -13,6 +13,19 @@ export interface Partition {
 
 export type DiskType = 'normal' | 'raid' | 'lvm';
 
+export interface BtrfsSubvolume {
+	id: number;
+	path: string;
+	parent_id: number;
+	snapshot: boolean;
+	read_only: boolean;
+}
+
+export interface BtrfsSubvolumeList {
+	default_id: number;
+	subvolumes: BtrfsSubvolume[];
+}
+
 export interface Disk {
 	device: string;
 	size: string;
