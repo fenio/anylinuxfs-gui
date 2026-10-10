@@ -67,7 +67,7 @@
 		passphraseError = null;
 	}
 
-	async function handlePassphraseSubmit(passphrase: string) {
+	async function handlePassphraseSubmit(passphrase?: string, keyFile?: string) {
 		if (submittingPassphrase || !passphraseDevice) return;
 		submittingPassphrase = true;
 		try {
@@ -75,7 +75,7 @@
 			const ro = passphraseReadOnly;
 			const extra = passphraseExtraOptions;
 			const ignorePerms = passphraseIgnorePermissions;
-			const result = await disks.mount(device, passphrase, ro, extra, ignorePerms);
+			const result = await disks.mount(device, passphrase, ro, extra, ignorePerms, keyFile);
 			if (result === 'success') {
 				passphraseDevice = null;
 				passphraseError = null;
@@ -83,8 +83,9 @@
 			} else if (result === 'encryption_required') {
 				// Wrong passphrase — keep dialog open with error
 				passphraseError = 'Incorrect passphrase or recovery key. Please try again.';
+			} else if (result === 'error') {
+				passphraseError = $disks.error || 'Unable to unlock the volume. Please try again.';
 			} else {
-				// Other error — close dialog, error shown in main banner
 				passphraseDevice = null;
 				passphraseError = null;
 			}

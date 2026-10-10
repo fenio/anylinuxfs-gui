@@ -8,7 +8,7 @@ A macOS GUI application for [anylinuxfs](https://github.com/nohajc/anylinuxfs) -
 
 - **Disk Management** - Browse and mount Linux partitions (ext2/3/4, btrfs, XFS, ZFS, etc.)
 - **Safe Eject** - Properly unmount and eject external drives with one click
-- **Encrypted Drives** - Support for LUKS and BitLocker encrypted volumes
+- **Encrypted Drives** - Unlock encrypted volumes with a passphrase, recovery key, or key file (requires an `anylinuxfs` CLI with `--key-file` support)
 - **Embedded VM Shell** - Interactive terminal with image selector (Alpine Linux or FreeBSD)
 - **Custom Actions** - Create and manage mount/unmount hooks with environment variables
 - **Image Management** - Install/uninstall VM images (Alpine Linux, FreeBSD for ZFS)
@@ -55,6 +55,8 @@ Then you can open the app normally.
 The default **Native sudo** mode uses cached/native PAM authentication and falls back to the app's password dialog. This works for normal macOS administrator accounts.
 
 For managed Macs where an endpoint privilege manager requires an interactive terminal, open **Preferences → Administrator authentication** and select **Interactive Terminal (managed Macs)**. Admin scans and mount operations then open an owner-only temporary `.command` file in Terminal. Complete the organization's approval or justification prompt there. LUKS and BitLocker secrets are requested directly by `anylinuxfs` in Terminal; they are not placed in the generated command file or its environment.
+
+In the unlock dialog, select **Key file → Browse…** to use a local encryption key file instead of a passphrase. Only its path is passed to `anylinuxfs`; the GUI does not read or save the key contents or remember the selected path. In Interactive Terminal mode, key-file mounts still request administrator approval in Terminal. For encrypted ZFS pools or volumes whose encryption was not detected during scanning, open the partition's **+** mount options and enable **Unlock with passphrase or key file** before mounting. Key-file formats and filesystem support are handled by the installed `anylinuxfs` CLI.
 
 Interactive mount commands use macOS `script -q /dev/null` as a bidirectional pseudo-terminal relay and are not piped through an output-capture process. Terminal echo is disabled before the command and restored by a cleanup trap. This is required for endpoint privilege managers that place an elevated child on another pseudo-terminal, and prevents encryption secrets from being echoed or written to a handoff transcript. Output capture remains enabled only for non-secret discovery commands such as `list`.
 

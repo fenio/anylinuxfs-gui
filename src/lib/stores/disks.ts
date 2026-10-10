@@ -89,7 +89,7 @@ function createDisksStore() {
 			currentAdminMode = enabled;
 			update((s) => ({ ...s, adminMode: enabled }));
 		},
-		async mount(device: string, passphrase?: string, readOnly?: boolean, extraOptions?: string, ignorePermissions?: boolean): Promise<'success' | 'encryption_required' | 'cancelled' | 'error'> {
+		async mount(device: string, passphrase?: string, readOnly?: boolean, extraOptions?: string, ignorePermissions?: boolean, keyFile?: string): Promise<'success' | 'encryption_required' | 'cancelled' | 'error'> {
 			// Reject if this specific device is already being mounted
 			const current = get({ subscribe });
 			if (current.mountingDevices.has(device)) return 'error';
@@ -113,7 +113,7 @@ function createDisksStore() {
 				messages.set(
 					device,
 					elevationMode === 'interactive_terminal'
-						? 'Waiting for administrator approval and disk passphrase in Terminal…'
+						? (keyFile ? 'Waiting for administrator approval in Terminal…' : 'Waiting for administrator approval and disk passphrase in Terminal…')
 						: 'Mounting…'
 				);
 				return {
@@ -126,7 +126,7 @@ function createDisksStore() {
 				};
 			});
 			try {
-				const result = await mountDisk(device, passphrase, readOnly, extraOptions, ignorePermissions);
+				const result = await mountDisk(device, passphrase, readOnly, extraOptions, ignorePermissions, keyFile);
 				if (result.outcome === 'mounted') {
 					logAction('Mount completed', { device });
 					notifyIfHidden('Mount Complete', `${device} mounted successfully.`);

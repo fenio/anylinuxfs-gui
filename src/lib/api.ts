@@ -17,8 +17,12 @@ export async function listDisks(useSudo: boolean = false, silent: boolean = fals
 	return await invoke<DiskListResult>('list_disks', { useSudo, silent });
 }
 
-export async function mountDisk(device: string, passphrase?: string, readOnly?: boolean, extraOptions?: string, ignorePermissions?: boolean): Promise<MountCommandResult> {
-	return await invoke<MountCommandResult>('mount_disk', { device, passphrase: passphrase || null, readOnly: readOnly || false, extraOptions: extraOptions || null, ignorePermissions: ignorePermissions || false });
+export async function selectKeyFile(): Promise<string | null> {
+	return await invoke<string | null>('select_key_file');
+}
+
+export async function mountDisk(device: string, passphrase?: string, readOnly?: boolean, extraOptions?: string, ignorePermissions?: boolean, keyFile?: string): Promise<MountCommandResult> {
+	return await invoke<MountCommandResult>('mount_disk', { device, passphrase: passphrase || null, keyFile: keyFile || null, readOnly: readOnly || false, extraOptions: extraOptions || null, ignorePermissions: ignorePermissions || false });
 }
 
 export async function getElevationPolicy(): Promise<ElevationPolicy> {

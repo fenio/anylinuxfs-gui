@@ -61,6 +61,13 @@ fn sanitize_error(stdout: &str, stderr: &str) -> String {
         return "Filesystem is read-only".to_string();
     }
 
+    let lower = combined.to_lowercase();
+    if lower.contains("no key available") || (lower.contains("failed to load") && lower.contains("key"))
+        || lower.contains("zfs load-key failed")
+    {
+        return "Encrypted volume - incorrect key or unable to load encryption key".to_string();
+    }
+
     // LUKS/encryption errors — pass through with keyword so mount_disk can detect them
     if combined.contains("LUKS") || combined.contains("luks")
         || combined.contains("decrypt") || combined.contains("passphrase")
@@ -469,6 +476,13 @@ osascript -e 'Tell application "System Events" to display dialog "anylinuxfs req
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn key_file_unlock_failures_have_an_actionable_error() {
+        for output in ["No key available with this passphrase.", "Error: zfs load-key failed for pool tank"] {
+            assert_eq!(sanitize_error("", output), "Encrypted volume - incorrect key or unable to load encryption key");
+        }
+    }
 
     #[test]
     fn endpoint_privilege_denial_has_a_specific_error() {

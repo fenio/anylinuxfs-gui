@@ -95,6 +95,7 @@
 	let extraOptions = $state(savedOptions);
 	let ignorePermissions = $state(loadIgnorePerms());
 	let showOptions = $state(false);
+	let requestUnlock = $state(false);
 	let quickChips = $state(loadChips());
 	let addingChip = $state(false);
 	let newChipValue = $state('');
@@ -176,7 +177,7 @@
 		saveOptions(extraOptions);
 		saveIgnorePerms(ignorePermissions);
 
-		if (partition.encrypted && $elevation.policy.mode !== 'interactive_terminal') {
+		if (partition.encrypted || requestUnlock) {
 			onRequestPassphrase(partition.device, ro, opts, ignorePermissions);
 		} else {
 			const result = await disks.mount(partition.device, undefined, ro, opts, ignorePermissions);
@@ -263,6 +264,10 @@
 	</div>
 	{#if showOptions && !isUnavailable}
 		<div class="options-panel">
+			<label class="flag-toggle">
+				<input type="checkbox" bind:checked={requestUnlock} disabled={mounting || alreadyMounted} />
+				<span>Unlock with passphrase or key file</span>
+			</label>
 			<label class="flag-toggle" title="Bypass Unix file permissions: files appear owned by the current macOS user (--ignore-permissions)">
 				<input
 					type="checkbox"
