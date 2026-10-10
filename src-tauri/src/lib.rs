@@ -188,9 +188,21 @@ pub fn run() {
             let file_menu = SubmenuBuilder::new(app, "File")
                 .close_window()
                 .build()?;
+            // WKWebView uses native editing actions for shortcuts such as Cmd+V.
+            // Keep these standard actions available, including in password inputs.
+            let edit_menu = SubmenuBuilder::new(app, "Edit")
+                .undo()
+                .redo()
+                .separator()
+                .cut()
+                .copy()
+                .paste()
+                .select_all()
+                .build()?;
             let menu = MenuBuilder::new(app)
                 .item(&app_menu)
                 .item(&file_menu)
+                .item(&edit_menu)
                 .build()?;
             app.set_menu(menu)?;
             app.on_menu_event(move |app, event| {
