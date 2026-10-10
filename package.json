@@ -8,6 +8,7 @@
   },
   "scripts": {
     "test": "node --test tests/*.test.mjs",
+    "test:filesystems": "ALFS_FILESYSTEM_INTEGRATION=1 node --test --test-concurrency=1 tests/filesystem-images.integration.test.mjs",
     "dev": "vite dev",
     "build": "vite build && npm run fix-paths",
     "fix-paths": "node scripts/fix-paths.js",

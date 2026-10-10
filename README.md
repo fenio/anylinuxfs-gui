@@ -54,6 +54,10 @@ Then you can open the app normally.
 
 The default **Native sudo** mode uses cached/native PAM authentication and falls back to the app's password dialog. This works for normal macOS administrator accounts.
 
+Mount-option suggestions are scoped by filesystem. Btrfs compression/subvolume options are not offered for XFS, ext filesystems, or other known types; conflicting `ro,rw` options are rejected. Existing saved options are preserved and incompatible selections are shown as errors rather than silently removed. For ZFS, **RO** requests a read-only pool import; ordinary Linux mount options are not applied to datasets and are rejected when ZFS is known. Dataset properties and snapshots are managed through the CLI. For encrypted or unidentified filesystems, inner-filesystem option compatibility cannot yet be checked; enable Admin mode for detection where possible. Dirty or damaged filesystems may require recovery outside the GUI; it does not automatically force repairs or suggest disabling write barriers.
+
+Filesystem behavior depends on the installed anylinuxfs CLI, VM kernel, and tools. Automated regression checks and opt-in disposable-image compatibility tests are documented in [tests/README.md](tests/README.md); a supported type is not a guarantee that every filesystem feature has been tested.
+
 ### Btrfs subvolumes and snapshots
 
 Btrfs partitions have a **Btrfs subvolume** selector. Choose the filesystem default, the top-level filesystem (ID 5), or click **Discover subvolumes** to list nested subvolumes and snapshots. Discovery requires an `anylinuxfs` CLI supporting `vm exec` and `btrfs-progs` in its Linux VM.

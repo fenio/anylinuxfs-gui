@@ -8,7 +8,7 @@ use tauri_plugin_dialog::DialogExt;
 use tokio::time::timeout;
 use crate::cache;
 use crate::cli::{
-    execute_command, execute_command_with_elevation, CommandExecutionError,
+    execute_command, execute_command_with_elevation, is_unlock_failure, CommandExecutionError,
 };
 use crate::elevation::{
     ElevationMode, ElevationState, TerminalInteraction,
@@ -156,7 +156,7 @@ fn update_mount_status(result: &mut DiskListResult) {
             let device_short = partition.device.trim_start_matches("/dev/");
 
             for (mount_device, mount_point) in &mounts {
-                if mount_device.ends_with(device_short) || mount_device == &partition.device {
+                if mount_device.trim_start_matches("/dev/") == device_short {
                     partition.mounted_by_system = true;
                     partition.system_mount_point = Some(mount_point.clone());
                     break;
@@ -293,12 +293,16 @@ fn is_linux_native_fs(fs: &str) -> bool {
 fn check_filesystem_support(fs: &str) -> (bool, Option<String>) {
     let fs_lower = fs.to_lowercase();
 
-    // Fully supported Linux-native filesystems
+    // Known mountable types; actual features depend on the installed CLI/VM.
     if fs_lower.contains("ext4") || fs_lower.contains("ext3") || fs_lower.contains("ext2")
         || fs_lower.contains("btrfs") || fs_lower.contains("xfs") || fs_lower.contains("f2fs")
         || fs_lower.contains("reiserfs")
     {
         return (true, None);
+    }
+
+    if fs_lower == "zfs" || fs_lower == "zfs_member" {
+        return (true, Some("ZFS pool (import and dataset mounting handled by anylinuxfs)".to_string()));
     }
 
     // Encrypted partitions are supported; an unlock key is requested at mount time.
@@ -499,8 +503,7 @@ fn parse_partition_line(line: &str, _disk_device: &str, _partition_num: u32, dis
 
     // Check for encryption markers
     let encrypted = filesystem.to_lowercase().contains("luks")
-        || filesystem.to_lowercase().contains("bitlocker")
-        || line.to_lowercase().contains("encrypted");
+        || filesystem.to_lowercase().contains("bitlocker");
 
     // Build the device path based on disk type
     let device = match disk_type {
@@ -562,7 +565,7 @@ fn parse_type_and_name(parts: &[&str]) -> (String, Option<String>) {
     ("unknown".to_string(), None)
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum MountOutcome {
     Mounted,
@@ -635,6 +638,32 @@ fn mount_passphrase(passphrase: Option<String>, using_key_file: bool, mode: Elev
     }
 }
 
+fn unlock_failure_outcome(
+    result: &Result<String, CommandExecutionError>,
+    supplied_credentials: bool,
+    mode: ElevationMode,
+) -> Option<MountOutcome> {
+    match result {
+        Err(CommandExecutionError::Failed(message)) if is_unlock_failure(message) => {
+            Some(if supplied_credentials || mode == ElevationMode::InteractiveTerminal {
+                MountOutcome::Failed
+            } else {
+                MountOutcome::EncryptionRequired
+            })
+        }
+        _ => None,
+    }
+}
+
+fn combined_mount_options(read_only: bool, extra: Option<&str>) -> Result<Option<String>, String> {
+    let mut parts: Vec<_> = extra.unwrap_or("").split(',').map(str::trim).filter(|part| !part.is_empty()).collect();
+    if (read_only || parts.contains(&"ro")) && parts.contains(&"rw") {
+        return Err("Choose either read-only (ro) or read-write (rw), not both".into());
+    }
+    if read_only && !parts.contains(&"ro") { parts.insert(0, "ro"); }
+    Ok((!parts.is_empty()).then(|| parts.join(",")))
+}
+
 #[tauri::command]
 pub async fn mount_disk(
     app: AppHandle,
@@ -650,6 +679,7 @@ pub async fn mount_disk(
     validate_device_path(&device)?;
     validate_unlock_credentials(passphrase.as_deref(), key_file.as_deref())?;
     let using_key_file = key_file.is_some();
+    let supplied_credentials = passphrase.is_some() || using_key_file;
     if using_key_file {
         // Feature detection works for upstream and backported CLI releases.
         let help = tokio::task::spawn_blocking(|| execute_command(&["mount", "--help"], false, None, true))
@@ -670,17 +700,7 @@ pub async fn mount_disk(
 
     // Build combined mount options string
     let ro = read_only.unwrap_or(false);
-    let mut opts = Vec::new();
-    if ro {
-        opts.push("ro".to_string());
-    }
-    if let Some(ref extra) = extra_options {
-        let trimmed = extra.trim();
-        if !trimmed.is_empty() {
-            opts.push(trimmed.to_string());
-        }
-    }
-    let combined_options = if opts.is_empty() { None } else { Some(opts.join(",")) };
+    let combined_options = combined_mount_options(ro, extra_options.as_deref())?;
 
     // Spawn the mount command in a background thread so we can poll status
     // concurrently — the mount appears in Finder before the command exits
@@ -727,14 +747,6 @@ pub async fn mount_disk(
         *mount_result_bg.lock().unwrap() = Some(result);
     });
 
-    // Helper to detect encryption-related output
-    let is_encryption_error = |text: &str| -> bool {
-        let lower = text.to_lowercase();
-        lower.contains("luks") || lower.contains("decrypt")
-            || lower.contains("passphrase") || lower.contains("password")
-            || lower.contains("encrypted") || lower.contains("wrong key")
-    };
-
     // Poll `anylinuxfs status` concurrently while mount command runs. Interactive
     // elevation gets a longer window for approval and a disk passphrase.
     let mount_timeout_secs = if elevation_mode == ElevationMode::InteractiveTerminal {
@@ -754,21 +766,16 @@ pub async fn mount_disk(
                 Ok(out) => out.clone(),
                 Err(error) => error.message(),
             };
-            if is_encryption_error(&output_text) {
+            // Never turn successful informational output into an unlock error,
+            // and never mistake cancellation/authentication failures for disk keys.
+            if let Some(outcome) = unlock_failure_outcome(result, supplied_credentials, elevation_mode) {
                 // Clean up leftover VM from the failed probe attempt
                 let _ = execute_command(&["stop", &device], false, None, false);
                 let _ = app.emit("status-changed", ());
-                if using_key_file || elevation_mode == ElevationMode::InteractiveTerminal {
-                    return Ok(MountCommandResult::new(
-                        MountOutcome::Failed,
-                        output_text,
-                    ));
-                }
-                return Ok(MountCommandResult::new(
-                    MountOutcome::EncryptionRequired,
-                    "This partition is encrypted. A passphrase or key file is needed to mount it."
-                        .to_string(),
-                ));
+                let message = if outcome == MountOutcome::EncryptionRequired {
+                    "This partition is encrypted. A passphrase or key file is needed to mount it.".to_string()
+                } else { output_text };
+                return Ok(MountCommandResult::new(outcome, message));
             }
             if let Err(error) = result {
                 let _ = app.emit("status-changed", ());
@@ -815,7 +822,7 @@ pub async fn mount_disk(
 
 fn check_device_mounted(device: &str) -> bool {
     crate::cli::get_status()
-        .map(|s| s.lines().any(|line| line.starts_with(device)))
+        .map(|s| super::status::status_has_device(&s, device))
         .unwrap_or(false)
 }
 
@@ -905,6 +912,19 @@ mod tests {
     use super::*;
 
     #[test]
+    fn successful_mounts_auth_errors_and_cancellation_never_request_disk_keys() {
+        for result in [
+            Ok("Encrypted volume: key load error resolved; mounted successfully".into()),
+            Err(CommandExecutionError::Failed("Permission denied - administrator approval required".into())),
+            Err(CommandExecutionError::Failed("XFS log needs recovery".into())),
+            Err(CommandExecutionError::Cancelled),
+            Err(CommandExecutionError::TimedOut),
+        ] {
+            assert_eq!(unlock_failure_outcome(&result, false, ElevationMode::Native), None);
+        }
+    }
+
+    #[test]
     fn btrfs_mount_options_accept_at_paths_but_reject_shell_metacharacters() {
         for opts in ["subvol=@", "subvol=@home,compress=zstd:5", "ro,subvol=@/.snapshots/42/snapshot", "subvolid=5"] {
             assert!(validate_mount_options(opts).is_ok());
@@ -912,6 +932,37 @@ mod tests {
         for opts in ["subvol=@;id", "subvol=$(id)", "subvol=`id`", "subvol=@\nreboot", "subvol=\"@\""] {
             assert!(validate_mount_options(opts).is_err());
         }
+    }
+
+    #[test]
+    fn zfs_and_luks_unlock_failures_only_prompt_for_missing_credentials() {
+        for message in ["No key available with this passphrase", "Key load error: Incorrect key provided", "Encryption unlock failed - incorrect credentials"] {
+            let result = Err(CommandExecutionError::Failed(message.into()));
+            assert_eq!(unlock_failure_outcome(&result, false, ElevationMode::Native), Some(MountOutcome::EncryptionRequired));
+            assert_eq!(unlock_failure_outcome(&result, true, ElevationMode::Native), Some(MountOutcome::Failed));
+            assert_eq!(unlock_failure_outcome(&result, false, ElevationMode::InteractiveTerminal), Some(MountOutcome::Failed));
+        }
+    }
+
+    #[test]
+    fn mount_options_preserve_readonly_and_reject_conflicts() {
+        assert_eq!(combined_mount_options(true, Some("noatime")), Ok(Some("ro,noatime".into())));
+        assert_eq!(combined_mount_options(true, Some("ro")), Ok(Some("ro".into())));
+        assert_eq!(combined_mount_options(false, None), Ok(None));
+        assert!(combined_mount_options(true, Some("rw")).is_err());
+        assert!(combined_mount_options(false, Some("ro,rw")).is_err());
+    }
+
+    #[test]
+    fn known_filesystems_and_zfs_members_are_mountable_not_unknown() {
+        for fs in ["ext2", "ext3", "ext4", "xfs", "f2fs", "btrfs", "zfs", "zfs_member", "ntfs", "exfat"] {
+            assert!(check_filesystem_support(fs).0, "{}", fs);
+        }
+        assert!(check_filesystem_support("zfs_member").1.unwrap().contains("ZFS pool"));
+        assert!(!check_filesystem_support("APFS").0);
+        assert!(!check_filesystem_support("unknown").0);
+        let part = parse_partition_line("xfs encrypted-backup 1.0 GB disk4s1", "/dev/disk4", 1, &DiskType::Normal).unwrap();
+        assert!(!part.encrypted, "a label is not an encryption marker");
     }
 
     #[test]

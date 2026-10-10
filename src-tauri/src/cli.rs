@@ -28,6 +28,22 @@ impl CommandExecutionError {
     }
 }
 
+/// Match actual unlock failures, not incidental mentions of encrypted disks,
+/// passwords, or LUKS in informational output. Shared by native and Terminal paths.
+pub(crate) fn is_unlock_failure(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    [
+        "encryption unlock failed", "no key available", "wrong key", "incorrect key",
+        "incorrect passphrase", "incorrect password", "bad password", "decryption failed",
+        "failed to decrypt", "cannot decrypt", "failed to unlock", "key load error",
+        "zfs load-key failed", "failed to load zfs key", "failed to load encryption key",
+        "passphrase is required", "passphrase required", "password is required",
+        "encryption key is required", "encryption key not loaded", "key must be loaded",
+    ].iter().any(|pattern| lower.lines().any(|line| {
+        !line.contains("administrator") && !line.contains("sudo:") && line.contains(pattern)
+    }))
+}
+
 /// Sanitize error output to avoid exposing sensitive system details
 /// Logs the full error for debugging but returns a user-friendly message
 fn sanitize_error(stdout: &str, stderr: &str) -> String {
@@ -37,10 +53,13 @@ fn sanitize_error(stdout: &str, stderr: &str) -> String {
     }
 
     // Check for common error patterns and return user-friendly messages
-    let combined = format!("{}{}", stdout, stderr);
+    let combined = format!("{}\n{}", stdout, stderr);
 
-    if combined.contains("not mounted") || combined.contains("No such file") {
+    if combined.contains("not mounted") {
         return "Filesystem is not mounted".to_string();
+    }
+    if combined.contains("No such file") {
+        return "A required file or device could not be found - check logs for details".to_string();
     }
     if combined.contains("Permission denied") {
         return "Permission denied - try running with administrator privileges".to_string();
@@ -61,22 +80,8 @@ fn sanitize_error(stdout: &str, stderr: &str) -> String {
         return "Filesystem is read-only".to_string();
     }
 
-    let lower = combined.to_lowercase();
-    if lower.contains("no key available") || (lower.contains("failed to load") && lower.contains("key"))
-        || lower.contains("zfs load-key failed")
-    {
-        return "Encrypted volume - incorrect key or unable to load encryption key".to_string();
-    }
-
-    // LUKS/encryption errors — pass through with keyword so mount_disk can detect them
-    if combined.contains("LUKS") || combined.contains("luks")
-        || combined.contains("decrypt") || combined.contains("passphrase")
-        || combined.contains("encrypted") || combined.contains("wrong key")
-    {
-        return format!("Encrypted volume - {}", combined.lines()
-            .find(|l| l.to_lowercase().contains("luks") || l.to_lowercase().contains("decrypt")
-                || l.to_lowercase().contains("passphrase") || l.to_lowercase().contains("encrypted"))
-            .unwrap_or("decryption failed"));
+    if is_unlock_failure(&combined) {
+        return "Encryption unlock failed - incorrect credentials or unable to load encryption key".to_string();
     }
 
     // For anylinuxfs-specific errors, extract the message after "Error:"
@@ -479,9 +484,30 @@ mod tests {
 
     #[test]
     fn key_file_unlock_failures_have_an_actionable_error() {
-        for output in ["No key available with this passphrase.", "Error: zfs load-key failed for pool tank"] {
-            assert_eq!(sanitize_error("", output), "Encrypted volume - incorrect key or unable to load encryption key");
+        for output in ["No key available with this passphrase.", "Error: zfs load-key failed for pool tank", "Key load error: Incorrect key provided for tank", "Failed to decrypt BitLocker volume"] {
+            assert_eq!(sanitize_error("", output), "Encryption unlock failed - incorrect credentials or unable to load encryption key");
         }
+    }
+
+    #[test]
+    fn informational_crypto_output_does_not_hide_filesystem_errors() {
+        let stdout = "Encrypted LUKS volume decrypted; passphrase accepted\n";
+        for (stderr, expected) in [
+            ("Error: XFS log needs recovery", "XFS log needs recovery"),
+            ("Error: cannot import pool: unsupported feature", "cannot import pool: unsupported feature"),
+            ("Permission denied", "Permission denied - try running with administrator privileges"),
+        ] {
+            let message = sanitize_error(stdout, stderr);
+            assert_eq!(message, expected);
+            assert!(!is_unlock_failure(&message));
+        }
+        assert!(!is_unlock_failure(stdout));
+        assert!(!is_unlock_failure("Incorrect password for administrator elevation"));
+    }
+
+    #[test]
+    fn missing_files_are_not_reported_as_unmounted_filesystems() {
+        assert_eq!(sanitize_error("", "No such file or directory"), "A required file or device could not be found - check logs for details");
     }
 
     #[test]

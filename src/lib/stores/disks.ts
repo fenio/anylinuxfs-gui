@@ -5,6 +5,7 @@ import { Timeouts, validateDevicePath } from '../constants';
 import { logAction, logError, notifyIfHidden } from '../logger';
 import { parseError } from '../errors';
 import { elevation } from './elevation';
+import { filesystemFamily, mountOptionError } from '../filesystems';
 
 interface DisksState {
 	disks: Disk[];
@@ -93,6 +94,12 @@ function createDisksStore() {
 			// Reject if this specific device is already being mounted
 			const current = get({ subscribe });
 			if (current.mountingDevices.has(device)) return 'error';
+			const partition = current.disks.flatMap((disk) => disk.partitions).find((partition) => partition.device === device);
+			const optionsError = mountOptionError(filesystemFamily(partition?.filesystem || ''), !!readOnly, extraOptions || '');
+			if (optionsError) {
+				update((s) => ({ ...s, error: optionsError }));
+				return 'error';
+			}
 
 			// Validate device path
 			const validationError = validateDevicePath(device);
