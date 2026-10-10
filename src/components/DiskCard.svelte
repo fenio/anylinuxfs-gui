@@ -3,13 +3,13 @@
 	import { disks } from '#lib/stores/disks';
 	import { elevation } from '#lib/stores/elevation';
 	import { status, mountedDevices } from '#lib/stores/status';
+	import { filesystemFamily, defaultMountOptions, mountOptionError, suggestedMountOptions } from '#lib/filesystems';
 
 	interface Props {
 		partition: Partition;
 		onRequestPassphrase: (device: string, readOnly: boolean, extraOptions: string, ignorePermissions: boolean) => void;
 	}
 
-	const DEFAULT_CHIPS = ['noatime', 'nodiratime', 'nobarrier', 'compress-force=zstd:5'];
 	const CHIPS_STORAGE_KEY = 'mountOptionChips';
 
 	let { partition, onRequestPassphrase }: Props = $props();
@@ -17,6 +17,7 @@
 	let mounting = $derived($disks.mountingDevices.has(partition.device));
 	let alreadyMounted = $derived($mountedDevices.has(partition.device));
 	let isUnavailable = $derived(partition.mounted_by_system || !partition.supported);
+	let family = $derived(filesystemFamily($status.mounts.find((mount) => mount.device === partition.device)?.filesystem || partition.filesystem));
 
 	// Storage key for per-drive options: prefer UUID, fall back to device path
 	function storageKey(): string {
@@ -71,20 +72,21 @@
 		}
 	}
 
-	// Load/save editable chips list (global)
+	// Scope suggestions by filesystem. Preserve the old global preferences as a
+	// migration source without offering known incompatible or unsafe defaults.
 	function loadChips(): string[] {
 		try {
-			const stored = localStorage.getItem(CHIPS_STORAGE_KEY);
-			if (stored) return JSON.parse(stored);
+			const stored = localStorage.getItem(`${CHIPS_STORAGE_KEY}:${family}`) || localStorage.getItem(CHIPS_STORAGE_KEY);
+			if (stored) return suggestedMountOptions(family, JSON.parse(stored));
 		} catch {
 			// Ignore parse errors
 		}
-		return [...DEFAULT_CHIPS];
+		return defaultMountOptions(family);
 	}
 
 	function saveChips(chips: string[]) {
 		try {
-			localStorage.setItem(CHIPS_STORAGE_KEY, JSON.stringify(chips));
+			localStorage.setItem(`${CHIPS_STORAGE_KEY}:${family}`, JSON.stringify(chips));
 		} catch {
 			// Ignore storage errors
 		}
@@ -93,10 +95,12 @@
 	// Initialize state from localStorage
 	let savedOptions = loadSavedOptions();
 	let extraOptions = $state(savedOptions);
+	let optionsError = $derived(mountOptionError(family, false, extraOptions));
 	let ignorePermissions = $state(loadIgnorePerms());
 	let showOptions = $state(false);
 	let requestUnlock = $state(false);
-	let quickChips = $state(loadChips());
+	let quickChips = $state<string[]>([]);
+	$effect(() => { quickChips = loadChips(); });
 	let addingChip = $state(false);
 	let newChipValue = $state('');
 
@@ -110,6 +114,7 @@
 
 	function toggleReadOnly(e: Event) {
 		const checked = (e.target as HTMLInputElement).checked;
+		if (checked) toggleOption('rw', false);
 		toggleOption('ro', checked);
 	}
 
@@ -166,7 +171,7 @@
 	}
 
 	async function handleMount() {
-		if ($elevation.loading || $elevation.saving) return;
+		if (optionsError || $elevation.loading || $elevation.saving) return;
 
 		// Split ro out of extraOptions for the backend API
 		const parts = optionParts();
@@ -241,7 +246,7 @@
 					<button
 						class="mount-btn"
 						onclick={handleMount}
-						disabled={mounting || alreadyMounted || $elevation.loading || $elevation.saving}
+						disabled={mounting || alreadyMounted || !!optionsError || $elevation.loading || $elevation.saving}
 						title={alreadyMounted ? 'Already mounted' : 'Mount this partition'}
 					>
 						{#if mounting}
@@ -262,8 +267,14 @@
 			</div>
 		{/if}
 	</div>
+	{#if optionsError}<p class="option-notice" role="alert">{optionsError} Open <strong>+</strong> to edit the saved options.</p>{/if}
 	{#if showOptions && !isUnavailable}
 		<div class="options-panel">
+			{#if family === 'zfs'}
+				<p class="option-notice">RO imports the ZFS pool read-only. Other Linux mount options are not applied to ZFS datasets. Dataset properties and snapshots are managed through the CLI.</p>
+			{:else if family === 'unknown'}
+				<p class="option-notice">The inner filesystem is not known yet. Enable Admin mode for detection; custom option compatibility cannot be checked until its type is known.</p>
+			{/if}
 			<label class="flag-toggle">
 				<input type="checkbox" bind:checked={requestUnlock} disabled={mounting || alreadyMounted} />
 				<span>Unlock with passphrase or key file</span>
@@ -322,6 +333,11 @@
 </div>
 
 <style>
+	.option-notice {
+		font-size: 12px;
+		color: var(--text-secondary);
+		margin: 8px 0;
+	}
 	.disk-card {
 		display: flex;
 		flex-direction: column;

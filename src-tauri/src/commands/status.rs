@@ -134,19 +134,20 @@ pub fn get_mount_status_sync() -> Result<Vec<MountInfo>, String> {
 
 /// Parse a line from `anylinuxfs status` output.
 /// Format: "/dev/disk4s1 on /Volumes/ntfs-test (ntfs, uid=501, ...) VM[cpus: 1, ram: 512 MiB]"
-fn parse_status_line(line: &str) -> Option<MountInfo> {
+pub(crate) fn parse_status_line(line: &str) -> Option<MountInfo> {
     // Split on " on " to get device and the rest
     let on_pos = line.find(" on ")?;
     let device = line[..on_pos].trim().to_string();
     let rest = &line[on_pos + 4..];
 
-    // Mount point is everything before the first '('
-    let paren_pos = rest.find('(')?;
-    let mount_point = rest[..paren_pos].trim().to_string();
+    // A mount point can itself contain parentheses. The CLI appends its
+    // filesystem/options group after the path, separated by " (".
+    let (mount_point, metadata) = rest.rsplit_once(" (")?;
+    let mount_point = mount_point.trim().to_string();
 
     // Filesystem is the first token inside parentheses
-    let close_paren = rest.find(')')?;
-    let paren_content = &rest[paren_pos + 1..close_paren];
+    let close_paren = metadata.find(')')?;
+    let paren_content = &metadata[..close_paren];
     let filesystem = paren_content.split(',').next()
         .map(|s| s.trim().to_string());
 
@@ -174,4 +175,36 @@ fn parse_status_line(line: &str) -> Option<MountInfo> {
         ram_mb,
         vcpus,
     })
+}
+
+pub(crate) fn status_has_device(status: &str, device: &str) -> bool {
+    status.lines().filter_map(parse_status_line).any(|mount| mount.device == device)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn matches_devices_exactly_including_raid_and_lvm() {
+        let status = "/dev/disk4s10 on /Volumes/xfs (xfs, rw) VM[cpus: 2, ram: 512 MiB]\nraid:disk5s1:disk6s1 on /Volumes/raid (ext4, ro)\nlvm:vg:disk7s1:root on /Volumes/root (ext4, rw)";
+        assert!(!status_has_device(status, "/dev/disk4s1"));
+        assert!(status_has_device(status, "/dev/disk4s10"));
+        assert!(status_has_device(status, "raid:disk5s1:disk6s1"));
+        assert!(!status_has_device(status, "raid:disk5s1"));
+        assert!(status_has_device(status, "lvm:vg:disk7s1:root"));
+        assert!(!status_has_device("/dev/disk4s1 failed", "/dev/disk4s1"));
+    }
+
+    #[test]
+    fn parses_filesystem_and_mount_names_with_spaces_and_parentheses() {
+        for fs in ["ext4", "xfs", "zfs", "btrfs", "f2fs", "ntfs", "exfat"] {
+            let line = format!("/dev/disk4s1 on /Volumes/backup (old) on disk ({}, ro) VM[cpus: 2, ram: 1024 MiB]", fs);
+            let mount = parse_status_line(&line).unwrap();
+            assert_eq!(mount.mount_point, "/Volumes/backup (old) on disk");
+            assert_eq!(mount.filesystem.as_deref(), Some(fs));
+            assert_eq!(mount.vcpus, Some(2));
+            assert_eq!(mount.ram_mb, Some(1024));
+        }
+    }
 }
