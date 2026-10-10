@@ -837,7 +837,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1038,7 +1038,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2293,7 +2293,7 @@ dependencies = [
  "png 0.18.1",
  "serde",
  "thiserror 2.0.21",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2746,7 +2746,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d8fae84b431384b68627d0f9b3b1245fcf9f46f6c0e3dc902e9dce64edd1967"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3288,7 +3288,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3580,7 +3580,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "607549934f6cc26b89cfecfdc46fa90f1e5d1536a68349b0c3a4f9d1c0d37959"
 dependencies = [
  "libc",
- "sigchld",
  "windows-sys 0.61.2",
 ]
 
@@ -3605,27 +3604,6 @@ name = "shlex"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
-
-[[package]]
-name = "sigchld"
-version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "24f2b37f04360cd465089b87a9c3869c08220a2f3458463f0adf8badf5e77f2c"
-dependencies = [
- "libc",
- "os_pipe",
- "signal-hook",
-]
-
-[[package]]
-name = "signal-hook"
-version = "0.4.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b29ffa27d3d59a049bb328258de100f8012848d1b08d444e08bbc02ac468435e"
-dependencies = [
- "libc",
- "signal-hook-registry",
-]
 
 [[package]]
 name = "signal-hook-registry"
@@ -3686,7 +3664,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3908,9 +3886,9 @@ checksum = "61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1"
 
 [[package]]
 name = "tauri"
-version = "2.12.2"
+version = "2.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d061d042ccd2df9c9f1508c1e63d835278c0a4c8801eb41764080e51f2eaaf34"
+checksum = "c404ecf956ff241bf6b39dd688614724e1bf1f63255abb4fc46d1c40371672ea"
 dependencies = [
  "anyhow",
  "bytes",
@@ -3960,9 +3938,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-build"
-version = "2.7.1"
+version = "2.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59563ca5b331fd97f27ee9672ec8d36d33bb3c9e2c9f6710a1a5687256052e45"
+checksum = "2eea0b6302f82c574b21af6fc6ae6e86183b9280853c22621d0abf0936911ffc"
 dependencies = [
  "anyhow",
  "cargo_toml",
@@ -3981,11 +3959,11 @@ dependencies = [
 
 [[package]]
 name = "tauri-codegen"
-version = "2.7.1"
+version = "2.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e50213e463086ecc283d7e9f51c30cc0fd304ad457425158018be26dbf0d0a80"
+checksum = "02f468f9a9bcd404f57e5c191d91024e3de953d4b610f78c2907e7110615cb1c"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "brotli",
  "ico",
  "json-patch",
@@ -4008,9 +3986,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-macros"
-version = "2.7.1"
+version = "2.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8129fb43bb6e0d6b73ad3315cd172beaab17cd28899c594b1b32c80edbbfd99c"
+checksum = "131bffec939b20642380317f8403a33c8888489925e14bb965ceaff0d949b1cb"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -4115,9 +4093,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-notification"
-version = "2.5.1"
+version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "533770889abb60a0407d5a32096182f0e6463f5a3dfaa675be94580aa14070e1"
+checksum = "8cf3cce3ea492b3a8a7f431a4e5dd5d31dc41b2a4a243faa660cbe8095a577bd"
 dependencies = [
  "log",
  "notify-rust",
@@ -4130,6 +4108,7 @@ dependencies = [
  "thiserror 2.0.21",
  "time",
  "url",
+ "zbus",
 ]
 
 [[package]]
@@ -4144,11 +4123,12 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-shell"
-version = "2.4.1"
+version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9bd8f131731087b2608ad604969af43b06c5411d094d635a81fc8c852dda5634"
+checksum = "8567d42b2c7264355daa1df415ec77f52aa42e885924c86a969be2e920e05521"
 dependencies = [
  "encoding_rs",
+ "libc",
  "log",
  "open",
  "os_pipe",
@@ -4161,6 +4141,7 @@ dependencies = [
  "tauri-plugin",
  "thiserror 2.0.21",
  "tokio",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -4284,7 +4265,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4602,7 +4583,7 @@ dependencies = [
  "png 0.18.1",
  "serde",
  "thiserror 2.0.21",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4631,7 +4612,7 @@ checksum = "f2f6fb2847f6742cd76af783a2a2c49e9375d0a111c7bef6f71cd9e738c72d6e"
 dependencies = [
  "memoffset",
  "tempfile",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4956,7 +4937,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4977,7 +4958,7 @@ dependencies = [
  "objc2-foundation",
  "objc2-quartz-core",
  "raw-window-handle",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
  "windows-version",
 ]
 
@@ -5294,7 +5275,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d6f32a0ff4a9f6f01231eb2059cc85479330739333e0e58cadf03b6af2cca10"
 dependencies = [
  "cfg-if",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
