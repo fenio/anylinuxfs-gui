@@ -1,15 +1,37 @@
 <script lang="ts">
+	import { selectKeyFile } from '#lib/api';
+	import { elevation } from '#lib/stores/elevation';
+	import { parseError } from '#lib/errors';
 	interface Props {
 		device: string;
 		errorMessage?: string | null;
 		submitting?: boolean;
-		onSubmit: (passphrase: string) => void;
+		onSubmit: (passphrase?: string, keyFile?: string) => void;
 		onCancel: () => void;
 	}
 
 	let { device, errorMessage = null, submitting = false, onSubmit, onCancel }: Props = $props();
 
 	let passphrase = $state('');
+	let method = $state<'passphrase' | 'key_file'>('passphrase');
+	let keyFile = $state('');
+	let selecting = $state(false);
+	let pickerError = $state<string | null>(null);
+	let terminalPassphrase = $derived(method === 'passphrase' && $elevation.policy.mode === 'interactive_terminal');
+	let canSubmit = $derived(!submitting && !selecting && (method === 'key_file' ? !!keyFile : terminalPassphrase || !!passphrase.trim()));
+
+	async function chooseKeyFile() {
+		selecting = true;
+		pickerError = null;
+		try {
+			const selected = await selectKeyFile();
+			if (selected) keyFile = selected;
+		} catch (error) {
+			pickerError = parseError(error).message;
+		} finally {
+			selecting = false;
+		}
+	}
 	let showPassphrase = $state(false);
 	let inputEl: HTMLInputElement | undefined = $state();
 
@@ -21,13 +43,15 @@
 
 	function handleSubmit(e: Event) {
 		e.preventDefault();
-		if (passphrase.trim() && !submitting) {
-			onSubmit(passphrase);
+		if (canSubmit) {
+			onSubmit(method === 'passphrase' && !terminalPassphrase ? passphrase : undefined, method === 'key_file' ? keyFile : undefined);
 		}
 	}
 
 	function handleCancel() {
+		if (submitting || selecting) return;
 		passphrase = '';
+		keyFile = '';
 		showPassphrase = false;
 		onCancel();
 	}
@@ -46,12 +70,27 @@
 		</div>
 		<div class="dialog-body">
 			<p class="device-info">
-				The partition <code>{device}</code> is encrypted.
+				Choose how to unlock <code>{device}</code>.
 			</p>
 			{#if errorMessage}
 				<p class="passphrase-error" role="alert">{errorMessage}</p>
 			{/if}
 			<form onsubmit={handleSubmit}>
+				<label for="unlock-method">Unlock method</label>
+				<select id="unlock-method" bind:value={method} disabled={submitting || selecting} onchange={() => { passphrase = ''; pickerError = null; }}>
+					<option value="passphrase">Passphrase or recovery key</option>
+					<option value="key_file">Key file</option>
+				</select>
+				{#if method === 'key_file'}
+					<label for="key-file">Key file</label>
+					<div class="input-wrapper">
+						<input id="key-file" value={keyFile} readonly placeholder="No file selected" title={keyFile} />
+						<button type="button" class="btn-secondary" onclick={chooseKeyFile} disabled={submitting || selecting}>Browse…</button>
+					</div>
+					{#if pickerError}<p class="passphrase-error" role="alert">{pickerError}</p>{/if}
+				{:else if terminalPassphrase}
+					<p>Enter the disk passphrase in Terminal after clicking Mount.</p>
+				{:else}
 				<label for="passphrase">Passphrase or recovery key</label>
 				<div class="input-wrapper">
 					<input
@@ -74,14 +113,15 @@
 						{showPassphrase ? 'Hide' : 'Show'}
 					</button>
 				</div>
+				{/if}
 			</form>
 		</div>
 		<div class="dialog-footer">
-			<button class="btn-secondary" onclick={handleCancel} disabled={submitting}>Cancel</button>
+			<button class="btn-secondary" onclick={handleCancel} disabled={submitting || selecting}>Cancel</button>
 			<button
 				class="btn-primary"
 				onclick={handleSubmit}
-				disabled={!passphrase.trim() || submitting}
+				disabled={!canSubmit}
 			>
 				{submitting ? 'Mounting...' : 'Mount'}
 			</button>
@@ -90,6 +130,15 @@
 </div>
 
 <style>
+	select {
+		width: 100%;
+		margin-bottom: 16px;
+		padding: 10px;
+		background: var(--input-bg);
+		color: var(--text-primary);
+		border: 1px solid var(--border-color);
+		border-radius: 6px;
+	}
 	.overlay {
 		position: fixed;
 		inset: 0;

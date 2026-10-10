@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
+use tauri_plugin_dialog::DialogExt;
 use tokio::time::timeout;
 use crate::cache;
 use crate::cli::{
@@ -587,17 +588,66 @@ impl MountCommandResult {
 }
 
 #[tauri::command]
+pub async fn select_key_file(app: AppHandle) -> Result<Option<String>, String> {
+    tokio::task::spawn_blocking(move || {
+        app.dialog().file().set_title("Select encryption key file").blocking_pick_file()
+            .map(|file| {
+                let path = file.into_path().map_err(|_| "Select a local key file".to_string())?;
+                path.to_str().map(str::to_owned)
+                    .ok_or_else(|| "Key file path is not valid UTF-8".to_string())
+            })
+            .transpose()
+    }).await.map_err(|e| format!("Unable to open file picker: {}", e))?
+}
+
+fn validate_unlock_credentials(passphrase: Option<&str>, key_file: Option<&str>) -> Result<(), String> {
+    if let Some(file) = key_file {
+        if passphrase.is_some() {
+            return Err("Choose either a passphrase or a key file, not both".to_string());
+        }
+        let path = std::path::Path::new(file);
+        if !path.is_absolute() || file.contains(['\0', '\n', '\r']) {
+            return Err("Select a key file using an absolute local path".to_string());
+        }
+        if !path.is_file() {
+            return Err("Key file does not exist or is not a regular file".to_string());
+        }
+        std::fs::File::open(path).map_err(|_| "Key file is not readable".to_string())?;
+    }
+    Ok(())
+}
+
+fn mount_passphrase(passphrase: Option<String>, using_key_file: bool, mode: ElevationMode) -> Option<String> {
+    if using_key_file || mode == ElevationMode::InteractiveTerminal {
+        None
+    } else {
+        Some(passphrase.unwrap_or_else(|| "##PROBE##".to_string()))
+    }
+}
+
+#[tauri::command]
 pub async fn mount_disk(
     app: AppHandle,
     elevation_state: tauri::State<'_, Arc<ElevationState>>,
     device: String,
     passphrase: Option<String>,
+    key_file: Option<String>,
     read_only: Option<bool>,
     extra_options: Option<String>,
     ignore_permissions: Option<bool>,
 ) -> Result<MountCommandResult, String> {
     // Validate device path before use
     validate_device_path(&device)?;
+    validate_unlock_credentials(passphrase.as_deref(), key_file.as_deref())?;
+    let using_key_file = key_file.is_some();
+    if using_key_file {
+        // Feature detection works for upstream and backported CLI releases.
+        let help = tokio::task::spawn_blocking(|| execute_command(&["mount", "--help"], false, None, true))
+            .await.map_err(|e| format!("Unable to check CLI support: {}", e))??;
+        if !help.contains("--key-file") {
+            return Err("The installed anylinuxfs CLI does not support key files. Update anylinuxfs and try again.".to_string());
+        }
+    }
     let elevation_state = elevation_state.inner().clone();
     let operation = format!("mount:{}", device);
     let operation_guard = elevation_state.begin_operation(operation.clone())?;
@@ -641,15 +691,14 @@ pub async fn mount_disk(
     let _mount_thread = tokio::task::spawn_blocking(move || {
         // Interactive Terminal elevation prompts there. Never place a disk
         // passphrase in a generated command file or process environment.
-        let effective_passphrase = if elevation_mode == ElevationMode::InteractiveTerminal {
-            None
-        } else {
-            Some(passphrase.unwrap_or_else(|| "##PROBE##".to_string()))
-        };
+        let effective_passphrase = mount_passphrase(passphrase, using_key_file, elevation_mode);
         let pass_ref = effective_passphrase.as_deref();
 
         let result = {
             let mut args: Vec<&str> = vec!["mount"];
+            if let Some(ref file) = key_file {
+                args.extend_from_slice(&["--key-file", file]);
+            }
             if ignore_permissions.unwrap_or(false) {
                 args.push("--ignore-permissions");
             }
@@ -704,7 +753,7 @@ pub async fn mount_disk(
                 // Clean up leftover VM from the failed probe attempt
                 let _ = execute_command(&["stop", &device], false, None, false);
                 let _ = app.emit("status-changed", ());
-                if elevation_mode == ElevationMode::InteractiveTerminal {
+                if using_key_file || elevation_mode == ElevationMode::InteractiveTerminal {
                     return Ok(MountCommandResult::new(
                         MountOutcome::Failed,
                         output_text,
@@ -712,7 +761,7 @@ pub async fn mount_disk(
                 }
                 return Ok(MountCommandResult::new(
                     MountOutcome::EncryptionRequired,
-                    "This partition is encrypted. A passphrase is needed to mount it."
+                    "This partition is encrypted. A passphrase or key file is needed to mount it."
                         .to_string(),
                 ));
             }
@@ -849,6 +898,40 @@ pub async fn force_cleanup() -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn key_files_and_terminal_mounts_do_not_set_probe_passphrases() {
+        assert_eq!(mount_passphrase(None, true, ElevationMode::Native), None);
+        assert_eq!(mount_passphrase(None, true, ElevationMode::InteractiveTerminal), None);
+        assert_eq!(mount_passphrase(Some("secret".into()), false, ElevationMode::InteractiveTerminal), None);
+        assert_eq!(mount_passphrase(None, false, ElevationMode::Native), Some("##PROBE##".into()));
+        assert_eq!(mount_passphrase(Some("secret".into()), false, ElevationMode::Native), Some("secret".into()));
+    }
+
+    #[test]
+    fn key_file_accepts_spaces_quotes_and_binary_content() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("disk's key file.key");
+        std::fs::write(&path, [0, 255, 10, 128]).unwrap();
+        assert!(validate_unlock_credentials(None, path.to_str()).is_ok());
+    }
+
+    #[test]
+    fn unlock_methods_are_mutually_exclusive() {
+        assert!(validate_unlock_credentials(Some("secret"), Some("/key")).is_err());
+        assert!(validate_unlock_credentials(Some("secret"), None).is_ok());
+        assert!(validate_unlock_credentials(None, None).is_ok());
+    }
+
+    #[test]
+    fn key_file_rejects_missing_files_directories_and_invalid_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(validate_unlock_credentials(None, dir.path().to_str()).is_err());
+        assert!(validate_unlock_credentials(None, dir.path().join("missing").to_str()).is_err());
+        assert!(validate_unlock_credentials(None, Some("relative.key")).is_err());
+        assert!(validate_unlock_credentials(None, Some("/key\nfile")).is_err());
+        assert!(validate_unlock_credentials(None, Some("/key\0file")).is_err());
+    }
 
     /// Issue #83: a whole-disk filesystem with no partition table (here a
     /// whole-disk LUKS volume) shows up only as the index-0 entry, whose
