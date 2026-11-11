@@ -181,9 +181,45 @@ pub(crate) fn status_has_device(status: &str, device: &str) -> bool {
     status.lines().filter_map(parse_status_line).any(|mount| mount.device == device)
 }
 
+/// Devices from `anylinuxfs status` that live on `disk`, which may be a whole
+/// disk ("/dev/disk4") or a partition. Covers the disk itself, its partitions,
+/// and RAID/LVM mounts that have a member on it.
+pub(crate) fn status_devices_on_disk(status: &str, disk: &str) -> Vec<String> {
+    let disk = disk.strip_prefix("/dev/").unwrap_or(disk);
+    // "disk4" owns "disk4" and "disk4s1", but not "disk40s1".
+    let on_disk = |member: &str| {
+        member.strip_prefix(disk).is_some_and(|rest| {
+            rest.is_empty()
+                || rest.strip_prefix('s').is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+        })
+    };
+    status
+        .lines()
+        .filter_map(parse_status_line)
+        .map(|mount| mount.device)
+        .filter(|device| match device.strip_prefix("/dev/") {
+            Some(name) => on_disk(name),
+            None => device.split(':').any(on_disk),
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn finds_mounts_on_a_whole_disk_including_raid_and_lvm_members() {
+        let status = "/dev/disk4s1 on /Volumes/a (ext4, rw) VM[cpus: 1, ram: 512 MiB]\n/dev/disk40s1 on /Volumes/b (ext4, rw)\nraid:disk5s1:disk6s1 on /Volumes/raid (ext4, ro)\nlvm:vg:disk7s1:root on /Volumes/root (ext4, rw)\n/dev/disk8 on /Volumes/whole (ext4, rw)";
+        assert_eq!(status_devices_on_disk(status, "/dev/disk4"), ["/dev/disk4s1"]);
+        assert_eq!(status_devices_on_disk(status, "/dev/disk4s1"), ["/dev/disk4s1"]);
+        assert_eq!(status_devices_on_disk(status, "/dev/disk40"), ["/dev/disk40s1"]);
+        assert_eq!(status_devices_on_disk(status, "/dev/disk6"), ["raid:disk5s1:disk6s1"]);
+        assert_eq!(status_devices_on_disk(status, "/dev/disk7"), ["lvm:vg:disk7s1:root"]);
+        assert_eq!(status_devices_on_disk(status, "/dev/disk8"), ["/dev/disk8"]);
+        assert!(status_devices_on_disk(status, "/dev/disk9").is_empty());
+        assert!(status_devices_on_disk("/dev/disk4s1 failed", "/dev/disk4").is_empty());
+    }
 
     #[test]
     fn matches_devices_exactly_including_raid_and_lvm() {

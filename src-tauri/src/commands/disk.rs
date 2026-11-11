@@ -826,6 +826,14 @@ fn check_device_mounted(device: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// anylinuxfs mounts that live on `disk` (the disk itself, its partitions, or
+/// RAID/LVM volumes with a member on it).
+fn mounted_devices_on(disk: &str) -> Vec<String> {
+    crate::cli::get_status()
+        .map(|s| super::status::status_devices_on_disk(&s, disk))
+        .unwrap_or_default()
+}
+
 #[tauri::command]
 pub async fn unmount_disk(app: AppHandle, device: Option<String>) -> Result<String, String> {
     // Validate device path if provided
@@ -857,21 +865,26 @@ pub async fn unmount_disk(app: AppHandle, device: Option<String>) -> Result<Stri
 
 
 #[tauri::command]
-pub async fn eject_disk(device: String) -> Result<String, String> {
+pub async fn eject_disk(app: AppHandle, device: String) -> Result<String, String> {
     // Validate device path before use
     validate_device_path(&device)?;
 
     // Eject (power down) a disk using diskutil
     // First unmount anylinuxfs if it has anything mounted, then eject
     let eject_future = tokio::task::spawn_blocking(move || {
-        // Check if this device is mounted by anylinuxfs and unmount it first
-        if check_device_mounted(&device) {
-            let _ = execute_command(&["unmount", &device], false, None, false);
+        // The eject button passes the whole disk (/dev/disk6) while anylinuxfs
+        // reports what it mounted (/dev/disk6s1), so unmount everything that
+        // lives on this disk first. Otherwise diskutil refuses to eject.
+        let mounted = mounted_devices_on(&device);
+        if !mounted.is_empty() {
+            for mount in &mounted {
+                let _ = execute_command(&["unmount", mount], false, None, false);
+            }
 
-            // Wait for this device to be unmounted (up to 5 seconds)
+            // Wait for them to be unmounted (up to 5 seconds)
             for _ in 0..10 {
                 thread::sleep(Duration::from_millis(500));
-                if !check_device_mounted(&device) {
+                if mounted_devices_on(&device).is_empty() {
                     break;
                 }
             }
@@ -891,10 +904,16 @@ pub async fn eject_disk(device: String) -> Result<String, String> {
         }
     });
 
-    timeout(Duration::from_secs(COMMAND_TIMEOUT_SECS), eject_future)
+    let result = timeout(Duration::from_secs(COMMAND_TIMEOUT_SECS), eject_future)
         .await
         .map_err(|_| format!("Eject timed out after {} seconds", COMMAND_TIMEOUT_SECS))?
-        .map_err(|e| format!("Task error: {}", e))?
+        .map_err(|e| format!("Task error: {}", e))?;
+
+    // Partitions may have been unmounted even if the eject itself failed
+    cache::invalidate_all();
+    let _ = app.emit("status-changed", ());
+
+    result
 }
 
 #[tauri::command]
