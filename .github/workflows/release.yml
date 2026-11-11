@@ -63,23 +63,12 @@ jobs:
           echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
           echo "DMG_PATH=$DMG_PATH" >> $GITHUB_OUTPUT
 
-      - name: Generate changelog
-        id: changelog
-        run: |
-          # Install git-cliff
-          cargo install git-cliff --locked
-          # Generate changelog for latest tag
-          CHANGELOG=$(git-cliff --config cliff.toml --latest --strip header)
-          # Handle multi-line output for GitHub Actions
-          echo "content<<EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGELOG" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
           files: ${{ steps.checksum.outputs.DMG_PATH }}
-          body: ${{ steps.changelog.outputs.content }}
+          # PR list with authors and new contributors; grouping in .github/release.yml
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
