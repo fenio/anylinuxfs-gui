@@ -865,7 +865,7 @@ pub async fn unmount_disk(app: AppHandle, device: Option<String>) -> Result<Stri
 
 
 #[tauri::command]
-pub async fn eject_disk(device: String) -> Result<String, String> {
+pub async fn eject_disk(app: AppHandle, device: String) -> Result<String, String> {
     // Validate device path before use
     validate_device_path(&device)?;
 
@@ -904,10 +904,16 @@ pub async fn eject_disk(device: String) -> Result<String, String> {
         }
     });
 
-    timeout(Duration::from_secs(COMMAND_TIMEOUT_SECS), eject_future)
+    let result = timeout(Duration::from_secs(COMMAND_TIMEOUT_SECS), eject_future)
         .await
         .map_err(|_| format!("Eject timed out after {} seconds", COMMAND_TIMEOUT_SECS))?
-        .map_err(|e| format!("Task error: {}", e))?
+        .map_err(|e| format!("Task error: {}", e))?;
+
+    // Partitions may have been unmounted even if the eject itself failed
+    cache::invalidate_all();
+    let _ = app.emit("status-changed", ());
+
+    result
 }
 
 #[tauri::command]
