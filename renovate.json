@@ -3,6 +3,7 @@
   "extends": [
     "config:recommended"
   ],
+  "labels": ["dependencies"],
   "packageRules": [
     {
       "description": "Hold TypeScript below v7 until svelte-check supports the native rewrite",
