@@ -272,11 +272,12 @@
 		border-radius: 8px;
 		overflow: hidden;
 		min-height: 300px;
+		/* Padding lives here: FitAddon sizes rows from .terminal's full height */
+		padding: 8px;
 	}
 
 	.terminal {
 		height: 100%;
-		padding: 8px;
 	}
 
 	:global(.terminal .xterm) {
